@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Readiness</string>
+    <string name="widget_description">Tagesaktueller Zustandsscore</string>
+    <string name="channel_name">Täglicher Zustandsscore</string>
+</resources>
