@@ -69,6 +69,34 @@ class DailyWorker(private val ctx: Context, params: WorkerParameters) : Coroutin
     }
 }
 
+/**
+ * Schlanke Aktualisierung nur für die Widgets.
+ *
+ * Zum Akkuverbrauch, weil das die eigentliche Frage ist: Dieser Lauf hält KEINEN
+ * dauerhaften Wakelock und weckt das Gerät nicht zusätzlich auf. WorkManager reiht die
+ * Aufgabe beim System ein, das sie in ohnehin stattfindende Wachphasen legt und im
+ * Doze-Modus bis zum nächsten Wartungsfenster zurückstellt. Die Bedingungen „Netz
+ * vorhanden" und „Akku nicht schwach" verhindern Läufe genau dann, wenn sie teuer wären.
+ *
+ * Der Aufwand je Lauf sind drei bis vier HTTP-Anfragen und wenige Millisekunden Rechnung;
+ * Kraft-Streams werden bewusst NICHT nachgeladen, die bleiben dem nächtlichen Lauf
+ * vorbehalten. Bei vier Läufen am Tag liegt das im Bereich einer einzelnen
+ * E-Mail-Synchronisation.
+ */
+class WidgetRefreshWorker(private val ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        try {
+            val repo = ReadinessRepository(ctx)
+            if (repo.settings.apiKey.isBlank() || !repo.settings.widgetAutoUpdate) return@withContext Result.success()
+            repo.refreshLight()
+            WidgetUpdater.update(ctx)
+            Result.success()
+        } catch (e: Exception) {
+            if (runAttemptCount < 2) Result.retry() else Result.success()
+        }
+    }
+}
+
 object Scheduler {
 
     /** Täglich gegen 5:30 Ortszeit, nur mit Netz — vor dem üblichen Wecken. */
@@ -83,6 +111,21 @@ object Scheduler {
             .setInputData(workDataOf(DailyWorker.KEY_NOTIFY to true))
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("daily_score", ExistingPeriodicWorkPolicy.UPDATE, req)
+    }
+
+    /** Widget-Aktualisierung alle sechs Stunden, abschaltbar. */
+    fun scheduleWidgetRefresh(context: Context, enabled: Boolean) {
+        val wm = WorkManager.getInstance(context)
+        if (!enabled) { wm.cancelUniqueWork("widget_refresh"); return }
+        val req = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(6, TimeUnit.HOURS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresBatteryNotLow(true)
+                    .build())
+            .setInitialDelay(30, TimeUnit.MINUTES)
+            .build()
+        wm.enqueueUniquePeriodicWork("widget_refresh", ExistingPeriodicWorkPolicy.UPDATE, req)
     }
 
     fun refreshNow(context: Context) {

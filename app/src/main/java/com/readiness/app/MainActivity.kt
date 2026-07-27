@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
                 onReload = vm::refresh,
                 onSaveSettings = vm::saveSettings,
                 onSetCycles = vm::setCycles,
-                onSetConfounders = vm::setConfounders,
+                onSetDayEntry = vm::setDayEntry,
             )
         }
     }

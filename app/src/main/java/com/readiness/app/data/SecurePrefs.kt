@@ -43,9 +43,25 @@ class SecurePrefs(context: Context) {
         get() = prefs.getFloat("sleep_need", 0f).takeIf { it > 0f }?.toDouble()
         set(v) { prefs.edit().apply { if (v != null && v > 0) putFloat("sleep_need", v.toFloat()) else remove("sleep_need") }.apply() }
 
-    var napMinutes: Int
-        get() = prefs.getInt("nap_min", 0)
-        set(v) { prefs.edit().apply { if (v > 0) putInt("nap_min", v) else remove("nap_min") }.apply() }
+    /** Powernap-Minuten je Tag: { "2026-07-27": 25 } */
+    private val napSerializer = MapSerializer(String.serializer(), Int.serializer())
+
+    var napByDay: Map<String, Int>
+        get() = runCatching {
+            AppJson.decodeFromString(napSerializer, prefs.getString("nap_by_day", "{}") ?: "{}")
+        }.getOrDefault(emptyMap())
+        set(v) { prefs.edit().putString("nap_by_day", AppJson.encodeToString(napSerializer, v)).apply() }
+
+    fun setNap(date: String, minutes: Int, keepFrom: String) {
+        val all = napByDay.toMutableMap()
+        if (minutes > 0) all[date] = minutes else all.remove(date)
+        napByDay = all.filterKeys { it >= keepFrom }
+    }
+
+    /** Hintergrund-Aktualisierung des Widgets (Akkuverbrauch bewusst steuerbar). */
+    var widgetAutoUpdate: Boolean
+        get() = prefs.getBoolean("widget_auto", true)
+        set(v) { prefs.edit().putBoolean("widget_auto", v).apply() }
 
     /**
      * { "2026-07-27": ["alcohol"] } — intervals.icu hat dafür kein Standardfeld.
@@ -73,7 +89,7 @@ class SecurePrefs(context: Context) {
     fun config(): AnalysisConfig = AnalysisConfig(
         cycles = cycles,
         sleepNeedHours = sleepNeedHours,
-        napMinutes = napMinutes,
+        napMinutesByDay = napByDay,
         confounders = confounders,
     )
 }

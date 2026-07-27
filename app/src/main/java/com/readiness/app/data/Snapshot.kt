@@ -28,6 +28,7 @@ data class Snapshot(
     val loadNote: String = "",
     val hrvDate: String? = null,
     val confounders: List<String> = emptyList(),
+    val napMinutesToday: Int = 0,
     val progression: Progression? = null,
     val chart: List<ChartPoint> = emptyList(),
 ) {

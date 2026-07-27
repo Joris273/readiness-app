@@ -121,7 +121,7 @@ object ScoreEngine {
                     m.sleepHours != null -> "${f1(m.sleepHours)} h Schlaf (Wochenmittel ${f1(m.sleepAvgHours)} h)."
                     else -> "Keine Schlafdaten übertragen."
                 }) + (m.sleep7Effective?.let {
-                    " 7-Tage-Mittel ${f1(it)} h" + (if (m.napMinutes > 0) " (inkl. ${m.napMinutes} min Nap)" else "") +
+                    " 7-Tage-Mittel ${f1(it)} h (inkl. eingetragener Powernaps)" +
                         (m.sleepNeed?.let { n -> " gegenüber deinem Bedarf ${f1(n)} h" +
                             (if (m.sleepNeedManual) " (selbst gesetzt)." else " (aus deiner Historie).") } ?: ".")
                 } ?: ""), "#3DDC97"),

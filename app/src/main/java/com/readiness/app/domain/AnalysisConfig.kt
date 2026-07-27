@@ -15,8 +15,14 @@ data class AnalysisConfig(
     val cycles: Int = 1,
     /** Individueller Schlafbedarf in Stunden; null = aus der eigenen Historie ableiten. */
     val sleepNeedHours: Double? = null,
-    /** Durchschnittliche Powernap-Minuten pro Tag (erfasst intervals.icu nicht). */
-    val napMinutes: Int = 0,
+    /**
+     * Powernap-Minuten JE TAG (erfasst intervals.icu nicht).
+     *
+     * Ein globaler Durchschnitt wäre eine Fiktion: Nickerchen fallen nicht jeden Tag an,
+     * und ein Mittelwert würde sie an schlaflosen Tagen erfinden und an Tagen mit langem
+     * Nap unterschlagen. Für die Bilanz zählt, was an DIESEM Tag tatsächlich dazukam.
+     */
+    val napMinutesByDay: Map<String, Int> = emptyMap(),
     /** Tage mit bekannter, nicht trainingsbedingter Störung: ISO-Datum -> Ursachen. */
     val confounders: Map<String, List<String>> = emptyMap(),
 ) {
@@ -42,6 +48,8 @@ data class AnalysisConfig(
 
     /** Tage, an denen ein Störfaktor eingetragen ist. */
     val confoundedDays: Set<String> get() = confounders.filterValues { it.isNotEmpty() }.keys
+
+    fun napHoursOn(date: String): Double = (napMinutesByDay[date] ?: 0) / 60.0
 
     companion object {
         const val CYCLE_DAYS = 42

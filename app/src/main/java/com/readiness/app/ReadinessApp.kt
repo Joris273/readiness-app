@@ -7,5 +7,6 @@ class ReadinessApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Scheduler.scheduleDaily(this)
+        Scheduler.scheduleWidgetRefresh(this, com.readiness.app.data.SecurePrefs(this).widgetAutoUpdate)
     }
 }

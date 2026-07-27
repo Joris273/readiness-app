@@ -7,6 +7,7 @@ import com.readiness.app.data.Snapshot
 import com.readiness.app.domain.AnalysisConfig
 import com.readiness.app.repo.ReadinessRepository
 import com.readiness.app.widget.WidgetUpdater
+import com.readiness.app.work.Scheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -27,7 +28,8 @@ data class UiState(
 
 data class SettingsState(
     val apiKey: String = "", val athlete: String = "0",
-    val cycles: Int = 1, val sleepNeed: String = "", val napMinutes: String = "",
+    val cycles: Int = 1, val sleepNeed: String = "",
+    val widgetAutoUpdate: Boolean = true,
 )
 
 class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
@@ -46,7 +48,7 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
     private fun readSettings() = with(repo.settings) {
         SettingsState(apiKey, athlete, cycles,
             sleepNeedHours?.let { String.format("%.2f", it).trimEnd('0').trimEnd('.', ',') } ?: "",
-            napMinutes.takeIf { it > 0 }?.toString() ?: "")
+            widgetAutoUpdate)
     }
 
     fun refresh() {
@@ -96,9 +98,10 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
             apiKey = s.apiKey; athlete = s.athlete.ifBlank { "0" }
             cycles = s.cycles
             sleepNeedHours = s.sleepNeed.replace(',', '.').toDoubleOrNull()
-            napMinutes = s.napMinutes.toIntOrNull() ?: 0
+            widgetAutoUpdate = s.widgetAutoUpdate
         }
         _state.value = _state.value.copy(settings = readSettings())
+        Scheduler.scheduleWidgetRefresh(getApplication(), s.widgetAutoUpdate)
         refresh()
     }
 
@@ -126,9 +129,22 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setConfounders(date: String, causes: List<String>) {
-        val keep = java.time.LocalDate.now().minusDays(AnalysisConfig(repo.settings.cycles).historyDays.toLong()).toString()
+    /** Tageseintrag speichern: Störfaktoren und Powernap gemeinsam, dann neu bewerten. */
+    fun setDayEntry(date: String, causes: List<String>, napMinutes: Int) {
+        val keep = java.time.LocalDate.now()
+            .minusDays(AnalysisConfig(repo.settings.cycles).fetchDays.toLong()).toString()
         repo.settings.setConfounder(date, causes, keep)
-        refresh()
+        repo.settings.setNap(date, napMinutes, keep)
+        // Reine Rechenänderung — kein Netzabruf nötig
+        _state.value = _state.value.copy(loading = true, error = null)
+        viewModelScope.launch {
+            try {
+                val (snap, _) = withContext(Dispatchers.IO) { repo.reevaluate() }
+                _state.value = _state.value.copy(snapshot = snap, loading = false)
+                WidgetUpdater.update(getApplication())
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(loading = false, error = e.message ?: "Fehler")
+            }
+        }
     }
 }

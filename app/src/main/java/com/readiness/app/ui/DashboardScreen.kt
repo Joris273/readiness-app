@@ -47,7 +47,7 @@ fun DashboardScreen(
     onReload: () -> Unit,
     onSaveSettings: (SettingsState) -> Unit,
     onSetCycles: (Int) -> Unit,
-    onSetConfounders: (String, List<String>) -> Unit,
+    onSetDayEntry: (String, List<String>, Int) -> Unit,
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showConfounder by remember { mutableStateOf(false) }
@@ -72,9 +72,17 @@ fun DashboardScreen(
     /* Ziehen zum Aktualisieren ist auf Android die erwartete Geste. Sie ersetzt das
        Symbol nicht, sondern ergänzt es — und liefert nebenbei die Rückmeldung, die beim
        reinen Symboldruck gefehlt hat. */
+    /* Der Indikator gehört zur GESTE, nicht zum Ladevorgang. Bindet man ihn an den
+       allgemeinen Ladezustand, erscheint er auch beim Start, beim Zyklenwechsel und beim
+       Speichern eines Tageseintrags — dort hat er nichts verloren und wirkt wie ein
+       Fehler. Deshalb ein eigener Zustand, der nur beim Ziehen gesetzt und mit dem Ende
+       des Ladens zurückgenommen wird. */
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(state.loading) { if (!state.loading) pulled = false }
+
     PullToRefreshBox(
-        isRefreshing = state.loading,
-        onRefresh = onReload,
+        isRefreshing = pulled && state.loading,
+        onRefresh = { pulled = true; onReload() },
         modifier = Modifier.fillMaxSize().background(T.Bg),
     ) {
         Column(
@@ -137,7 +145,7 @@ fun DashboardScreen(
 
             snap?.hrvDate?.let { date ->
                 Spacer(Modifier.height(12.dp))
-                ConfounderCard(date, snap.confounders) { showConfounder = true }
+                DayEntryCard(date, snap.confounders, snap.napMinutesToday) { showConfounder = true }
             }
 
             snap?.progression?.let {
@@ -167,8 +175,8 @@ fun DashboardScreen(
 
     if (showSettings) SettingsDialog(state.settings, state.cacheKb, { showSettings = false }) { showSettings = false; onSaveSettings(it) }
     if (showConfounder && snap?.hrvDate != null)
-        ConfounderDialog(snap.hrvDate, snap.confounders, { showConfounder = false }) {
-            showConfounder = false; onSetConfounders(snap.hrvDate, it)
+        DayEntryDialog(snap.hrvDate, snap.confounders, snap.napMinutesToday, { showConfounder = false }) { causes, nap ->
+            showConfounder = false; onSetDayEntry(snap.hrvDate, causes, nap)
         }
 }
 

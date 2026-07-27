@@ -49,7 +49,7 @@ object MetricsBuilder {
         var m = Metrics(
             dataDate = last.date, ctl = last.ctl, atl = last.atl,
             tsb = if (last.ctl != null && last.atl != null) last.ctl - last.atl else null,
-            napMinutes = cfg.napMinutes,
+            napMinutes = cfg.napMinutesByDay[last.date] ?: 0,
         )
 
         // ---- HRV: Tageswert gegen individuelle SWC-Bandbreite ----
@@ -150,21 +150,24 @@ object MetricsBuilder {
             m = m.copy(sleepHours = w[sIdx].sleepSeconds!! / 3600,
                 sleepAvgHours = baseline(w, sIdx, 7) { it.sleepSeconds }?.div(3600))
         }
+        /* Naps TAGESGENAU zur jeweiligen Nacht addieren, nicht als pauschaler Zuschlag.
+           Ein Durchschnitt würde sie an Tagen ohne Nickerchen erfinden und an Tagen mit
+           langem Nap unterschlagen — genau dort, wo die Bilanz entscheidend ist. */
         val s7 = mutableListOf<Double>(); val s30 = mutableListOf<Double>(); val sAll = mutableListOf<Double>()
         w.forEach { d ->
             val sec = d.sleepSeconds ?: return@forEach
             val date = runCatching { LocalDate.parse(d.date) }.getOrNull() ?: return@forEach
             val back = (today.toEpochDay() - date.toEpochDay()).toInt()
-            if (back in 0..6) s7 += sec / 3600
-            if (back in 0..29) s30 += sec / 3600
-            if (back in 0..59) sAll += sec / 3600
+            val total = sec / 3600 + cfg.napHoursOn(d.date)
+            if (back in 0..6) s7 += total
+            if (back in 0..29) s30 += total
+            if (back in 0..59) sAll += total
         }
-        val napH = cfg.napMinutes / 60.0
         val hist = if (sAll.size >= 10) sAll.sorted().let {
             if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2
-        } + napH else null
+        } else null
         val need = cfg.sleepNeedHours ?: hist
-        val eff = if (s7.size >= 4) s7.average() + napH else null
+        val eff = if (s7.size >= 4) s7.average() else null
         m = m.copy(
             sleep7Effective = eff,
             sleep30 = if (s30.size >= 14) s30.average() else null,

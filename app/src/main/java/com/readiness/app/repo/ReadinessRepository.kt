@@ -33,6 +33,11 @@ class ReadinessRepository(context: Context) {
 
     private var memRaw: RawBundle? = null
 
+    companion object {
+        /** Rohdaten gelten vier Stunden als aktuell genug. */
+        const val MAX_AGE_MS = 4 * 60 * 60 * 1000L
+    }
+
     val settings: SecurePrefs get() = prefs
 
     fun cached(): Snapshot? = snapshots.load()
@@ -42,9 +47,13 @@ class ReadinessRepository(context: Context) {
     private fun raw(cfg: AnalysisConfig, today: LocalDate, forceNetwork: Boolean): RawBundle {
         if (!forceNetwork) {
             val candidate = memRaw ?: rawStore.load()?.also { memRaw = it }
-            // Am selben Tag und mit ausreichender Tiefe ist ein erneuter Abruf zwecklos
-            if (candidate != null && candidate.day == today.toString() && candidate.fetchDays >= cfg.fetchDays)
-                return candidate
+            /* Wiederverwenden nur, wenn die Daten vom selben Tag stammen, tief genug
+               reichen UND nicht zu alt sind. Ohne Altersgrenze würde die App den ganzen
+               Tag auf dem Morgenstand hängen bleiben, obwohl Garmin und Karoo laufend
+               nachliefern. */
+            val ageOk = candidate != null && System.currentTimeMillis() - candidate.savedAt < MAX_AGE_MS
+            if (candidate != null && ageOk && candidate.day == today.toString() &&
+                candidate.fetchDays >= cfg.fetchDays) return candidate
         }
         val fresh = icu.fetchRaw(cfg, today)
         memRaw = fresh
@@ -75,6 +84,15 @@ class ReadinessRepository(context: Context) {
     fun reevaluate(today: LocalDate = LocalDate.now()): Pair<Snapshot, ReadinessResult> {
         val cfg = prefs.config()
         return evaluate(raw(cfg, today, forceNetwork = false), cfg, today, streamBudget = 0)
+    }
+
+    /**
+     * Schlanker Lauf für das Widget: frische Rohdaten, neu bewerten, KEINE Stream-Abrufe.
+     * Damit bleibt der Hintergrundaufwand auf wenige HTTP-Anfragen begrenzt.
+     */
+    fun refreshLight(today: LocalDate = LocalDate.now()): Snapshot {
+        val cfg = prefs.config()
+        return evaluate(raw(cfg, today, forceNetwork = true), cfg, today, streamBudget = 0).first
     }
 
     /** Kraftdaten weiter auffüllen und neu bewerten — für den Hintergrundlauf. */
