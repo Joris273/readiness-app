@@ -2,6 +2,7 @@ package com.readiness.app.repo
 
 import com.readiness.app.data.ActivityDto
 import com.readiness.app.data.IcuClient
+import com.readiness.app.data.RawBundle
 import com.readiness.app.data.SportSettingsDto
 import com.readiness.app.data.WellnessDto
 import com.readiness.app.domain.AnalysisConfig
@@ -31,9 +32,11 @@ class IcuRepository(private val client: IcuClient) {
         val athleteName: String?,
     )
 
-    fun load(cfg: AnalysisConfig, today: LocalDate = LocalDate.now()): RawData {
+    /** Rohantwort holen — in der Form, in der sie sich unverändert speichern lässt. */
+    fun fetchRaw(cfg: AnalysisConfig, today: LocalDate = LocalDate.now()): RawBundle {
         val newest = today.toString()
-        val oldest = today.minusDays(cfg.historyDays.toLong()).toString()
+        // Immer die volle Tiefe holen, damit ein Zyklenwechsel ohne Netzabruf auskommt
+        val oldest = today.minusDays(cfg.fetchDays.toLong()).toString()
 
         val wellness = client.wellness(oldest, newest).sortedBy { it.id }
         var activities = client.activities(oldest, newest)
@@ -52,13 +55,19 @@ class IcuRepository(private val client: IcuClient) {
             }
         }
 
-        return RawData(
-            wellness = wellness.map { it.toDomain() },
-            sessions = activities.mapNotNull { it.toDomain() },
-            thresholds = parseThresholds(settings, activities, today),
-            athleteName = name,
+        return RawBundle(
+            day = newest, savedAt = System.currentTimeMillis(), fetchDays = cfg.fetchDays,
+            wellness = wellness, activities = activities, sportSettings = settings, athleteName = name,
         )
     }
+
+    /** Rohantwort in Domänenmodelle übersetzen. Rein rechnend, ohne Netzzugriff. */
+    fun map(b: RawBundle, today: LocalDate = LocalDate.now()): RawData = RawData(
+        wellness = b.wellness.map { it.toDomain() },
+        sessions = b.activities.mapNotNull { it.toDomain() },
+        thresholds = parseThresholds(b.sportSettings, b.activities, today),
+        athleteName = b.athleteName,
+    )
 
     private fun WellnessDto.toDomain() = WellnessDay(
         date = id, ctl = ctl, atl = atl, hrv = hrv,

@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.readiness.app.domain.Confounders
 
 @Composable
-fun SettingsDialog(s: SettingsState, onDismiss: () -> Unit, onSave: (SettingsState) -> Unit) {
+fun SettingsDialog(s: SettingsState, cacheKb: Long, onDismiss: () -> Unit, onSave: (SettingsState) -> Unit) {
     var key by remember { mutableStateOf(s.apiKey) }
     var athlete by remember { mutableStateOf(if (s.athlete == "0") "" else s.athlete) }
     var need by remember { mutableStateOf(s.sleepNeed) }
@@ -39,6 +39,10 @@ fun SettingsDialog(s: SettingsState, onDismiss: () -> Unit, onSave: (SettingsSta
                 OutlinedTextField(nap, { nap = it }, label = { Text("Powernaps Ø min/Tag") }, singleLine = true)
                 Text("FTP-Werte werden automatisch aus intervals.icu gelesen.",
                     color = T.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                if (cacheKb > 0) Text(
+                    "Zwischengespeicherte Rohdaten: $cacheKb KB — sie machen App-Start und " +
+                        "Zeitraumwechsel ohne Netzabruf möglich.",
+                    color = T.Faint, fontSize = 10.5.sp, modifier = Modifier.padding(top = 6.dp))
             }
         })
 }

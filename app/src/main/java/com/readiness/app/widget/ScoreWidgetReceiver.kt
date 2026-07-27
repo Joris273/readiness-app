@@ -10,5 +10,9 @@ class ScoreWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 object WidgetUpdater {
-    suspend fun update(context: Context) { runCatching { ScoreWidget().updateAll(context) } }
+    /** Beide Widget-Varianten gemeinsam aktualisieren. */
+    suspend fun update(context: Context) {
+        runCatching { ScoreWidget().updateAll(context) }
+        runCatching { ScoreMiniWidget().updateAll(context) }
+    }
 }

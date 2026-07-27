@@ -73,8 +73,11 @@ fun ProgressionCard(p: Snapshot.Progression, open: Boolean, onToggle: () -> Unit
             Text("Verglichen werden die letzten ${opt.sub} mit den ${opt.sub} davor — ${opt.hint}.",
                 color = T.Faint, fontSize = 11.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 12.dp))
 
-            Row(Modifier.fillMaxWidth()) {
-                Box(Modifier.width(3.dp).height(52.dp).background(T.hex(p.colorHex)))
+            /* Der Farbbalken muss die Höhe des Textes annehmen, nicht eine geratene feste
+               Höhe — bei längeren Begründungen reichte er sonst nur bis zur Hälfte.
+               IntrinsicSize.Min misst die Zeile am Inhalt, fillMaxHeight streckt den Balken. */
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(T.hex(p.colorHex)))
                 Column(Modifier.padding(start = 12.dp)) {
                     Text(p.title, color = T.hex(p.colorHex), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Text(p.text, color = T.Muted, fontSize = 12.5.sp, modifier = Modifier.padding(top = 3.dp))

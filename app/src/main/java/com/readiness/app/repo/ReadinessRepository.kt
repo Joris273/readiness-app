@@ -2,76 +2,86 @@ package com.readiness.app.repo
 
 import android.content.Context
 import com.readiness.app.data.IcuClient
+import com.readiness.app.data.RawBundle
+import com.readiness.app.data.RawStore
 import com.readiness.app.data.SecurePrefs
 import com.readiness.app.data.Snapshot
+import com.readiness.app.data.SnapshotMapper
 import com.readiness.app.data.SnapshotStore
 import com.readiness.app.data.TorqueStore
+import com.readiness.app.domain.AnalysisConfig
 import com.readiness.app.domain.ReadinessEngine
 import com.readiness.app.domain.ReadinessResult
-import com.readiness.app.data.SnapshotMapper
 import java.time.LocalDate
 
 /**
- * Orchestriert Beschaffung, Auswertung und Zwischenspeicherung. Bewusst dünn: alle
- * Entscheidungen liegen in der Domäne, alle Netzzugriffe im IcuRepository.
+ * Orchestriert Beschaffung, Auswertung und Zwischenspeicherung.
+ *
+ * Leitgedanke der Zwischenspeicherung: Rohdaten werden EINMAL je Tag geholt, in voller
+ * Tiefe, und danach nur noch neu ausgewertet. Ein Wechsel des Vergleichszeitraums oder
+ * ein erneuter App-Start kommt damit ohne Netzabruf aus.
  */
 class ReadinessRepository(context: Context) {
 
     private val prefs = SecurePrefs(context)
     private val client = IcuClient { prefs.apiKey to prefs.athlete }
     private val icu = IcuRepository(client)
-    private val torque = TorqueRepository(client, TorqueStore(context))
+    private val torqueStore = TorqueStore(context)
+    private val torque = TorqueRepository(client, torqueStore)
     private val snapshots = SnapshotStore(context)
+    private val rawStore = RawStore(context)
 
-    /* Rohdaten des letzten Abrufs zwischenhalten.
-       Ein Wechsel des Vergleichszeitraums ändert nur die AUSWERTUNG, nicht die Daten —
-       solange die vorhandene Historie tief genug reicht. Ohne diesen Zwischenspeicher
-       hätte jeder Klick auf „2 Zyklen" einen vollständigen Neuabruf über bis zu 288 Tage
-       ausgelöst, was die spürbare Verzögerung erklärt. */
-    private data class RawCache(val raw: IcuRepository.RawData, val days: Int, val day: LocalDate, val at: Long)
-    private var rawCache: RawCache? = null
+    private var memRaw: RawBundle? = null
 
     val settings: SecurePrefs get() = prefs
 
     fun cached(): Snapshot? = snapshots.load()
+    fun cacheSizeKb(): Long = rawStore.sizeKb()
 
-    /** Reicht der Zwischenspeicher für diese Konfiguration? */
-    private fun usableCache(cfg: com.readiness.app.domain.AnalysisConfig, today: LocalDate): IcuRepository.RawData? {
-        val c = rawCache ?: return null
-        val fresh = System.currentTimeMillis() - c.at < 10 * 60_000
-        return if (c.day == today && c.days >= cfg.historyDays && fresh) c.raw else null
+    /** Rohdaten aus Arbeitsspeicher, Platte oder Netz — in dieser Reihenfolge. */
+    private fun raw(cfg: AnalysisConfig, today: LocalDate, forceNetwork: Boolean): RawBundle {
+        if (!forceNetwork) {
+            val candidate = memRaw ?: rawStore.load()?.also { memRaw = it }
+            // Am selben Tag und mit ausreichender Tiefe ist ein erneuter Abruf zwecklos
+            if (candidate != null && candidate.day == today.toString() && candidate.fetchDays >= cfg.fetchDays)
+                return candidate
+        }
+        val fresh = icu.fetchRaw(cfg, today)
+        memRaw = fresh
+        rawStore.save(fresh)
+        return fresh
     }
 
-    /**
-     * Vollständiger Durchlauf. Muss außerhalb des Hauptthreads laufen.
-     * @param streamBudget Anzahl neuer Stream-Abrufe; 0 nutzt nur den Cache.
-     */
-    fun refresh(streamBudget: Int? = null, today: LocalDate = LocalDate.now(),
-                allowCache: Boolean = false): Pair<Snapshot, ReadinessResult> {
-        val cfg = prefs.config()
-        val raw = (if (allowCache) usableCache(cfg, today) else null) ?: icu.load(cfg, today).also {
-            rawCache = RawCache(it, cfg.historyDays, today, System.currentTimeMillis())
-        }
-        val withTorqueWork = torque.detectRecentTorqueWork(raw.sessions, raw.thresholds, today)
-        val enriched = torque.enrich(withTorqueWork, raw.thresholds, cfg, today, streamBudget ?: cfg.streamBudget)
+    private fun evaluate(bundle: RawBundle, cfg: AnalysisConfig, today: LocalDate,
+                         streamBudget: Int): Pair<Snapshot, ReadinessResult> {
+        val mapped = icu.map(bundle, today)
+        val withWork = torque.detectRecentTorqueWork(mapped.sessions, mapped.thresholds, today, streamBudget > 0)
+        val enriched = torque.enrich(withWork, mapped.thresholds, cfg, today, streamBudget)
         val result = ReadinessEngine.evaluate(
-            raw.wellness, enriched.sessions, raw.thresholds, cfg, today, enriched.scan)
+            mapped.wellness, enriched.sessions, mapped.thresholds, cfg, today, enriched.scan)
         val snap = SnapshotMapper.map(result, cfg)
         snapshots.save(snap)
         return snap to result
     }
 
-    /** Nur die Kraftdaten weiter auffüllen und neu bewerten — für den Hintergrundlauf. */
+    /** Vollständiger Durchlauf mit Netzabruf. Muss außerhalb des Hauptthreads laufen. */
+    fun refresh(streamBudget: Int? = null, today: LocalDate = LocalDate.now(),
+                forceNetwork: Boolean = true): Pair<Snapshot, ReadinessResult> {
+        val cfg = prefs.config()
+        return evaluate(raw(cfg, today, forceNetwork), cfg, today, streamBudget ?: cfg.streamBudget)
+    }
+
+    /** Nur neu auswerten — ohne Netz, für den Wechsel des Vergleichszeitraums. */
+    fun reevaluate(today: LocalDate = LocalDate.now()): Pair<Snapshot, ReadinessResult> {
+        val cfg = prefs.config()
+        return evaluate(raw(cfg, today, forceNetwork = false), cfg, today, streamBudget = 0)
+    }
+
+    /** Kraftdaten weiter auffüllen und neu bewerten — für den Hintergrundlauf. */
     fun fillTorqueStep(today: LocalDate = LocalDate.now()): Pair<Snapshot, Boolean> {
         val cfg = prefs.config()
-        val raw = usableCache(cfg, today) ?: icu.load(cfg, today).also {
-            rawCache = RawCache(it, cfg.historyDays, today, System.currentTimeMillis())
-        }
-        val enriched = torque.enrich(raw.sessions, raw.thresholds, cfg, today, budget = 6)
-        val result = ReadinessEngine.evaluate(
-            raw.wellness, enriched.sessions, raw.thresholds, cfg, today, enriched.scan)
-        val snap = SnapshotMapper.map(result, cfg)
-        snapshots.save(snap)
-        return snap to (enriched.scan.missing > 0)
+        val bundle = raw(cfg, today, forceNetwork = false)
+        val (snap, result) = evaluate(bundle, cfg, today, streamBudget = 6)
+        return snap to ((result.progression.torqueScan?.missing ?: 0) > 0)
     }
 }

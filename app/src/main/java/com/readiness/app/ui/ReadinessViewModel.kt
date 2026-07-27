@@ -22,6 +22,7 @@ data class UiState(
     val filling: Boolean = false,
     val error: String? = null,
     val settings: SettingsState = SettingsState(),
+    val cacheKb: Long = 0,
 )
 
 data class SettingsState(
@@ -37,7 +38,8 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
     private var fillJob: Job? = null
 
     init {
-        _state.value = _state.value.copy(snapshot = repo.cached(), settings = readSettings())
+        _state.value = _state.value.copy(snapshot = repo.cached(), settings = readSettings(),
+            cacheKb = repo.cacheSizeKb())
         if (repo.settings.apiKey.isNotBlank()) refresh()
     }
 
@@ -54,7 +56,8 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val (snap, _) = withContext(Dispatchers.IO) { repo.refresh() }
-                _state.value = _state.value.copy(snapshot = snap, loading = false)
+                _state.value = _state.value.copy(snapshot = snap, loading = false,
+                    cacheKb = repo.cacheSizeKb())
                 WidgetUpdater.update(getApplication())
                 startBackgroundFill()
             } catch (e: Exception) {
@@ -114,7 +117,7 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
             settings = _state.value.settings.copy(cycles = n), loading = true, error = null)
         viewModelScope.launch {
             try {
-                val (snap, _) = withContext(Dispatchers.IO) { repo.refresh(allowCache = true) }
+                val (snap, _) = withContext(Dispatchers.IO) { repo.reevaluate() }
                 _state.value = _state.value.copy(snapshot = snap, loading = false)
                 startBackgroundFill()
             } catch (e: Exception) {

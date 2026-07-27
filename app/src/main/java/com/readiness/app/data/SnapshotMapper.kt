@@ -45,16 +45,28 @@ object SnapshotMapper {
             else -> "${lh.consecutiveDays} Trainingstag${if (lh.consecutiveDays == 1) "" else "e"} in Folge" +
                 if (lh.hardYesterday) " · gestern hart" else ""
         }
+        /* Einheiten konsistent halten: Dauer als h:mm, Zonenzeiten gebündelt mit EINER
+           gemeinsamen Einheit. „Belastung" statt „Last" oder „TSS" — intervals.icu liefert
+           icu_training_load, das bei Leistungsdaten dem TSS entspricht, bei reiner
+           Herzfrequenz aber einem HRSS/TRIMP-Wert. „TSS" wäre also zu eng. */
+        fun hm(sec: Double): String {
+            val m = (sec / 60).roundToInt()
+            return if (m >= 60) "${m / 60}:${(m % 60).toString().padStart(2, '0')} h" else "$m min"
+        }
+        fun zoneLine(z4: Int, z5: Int, z6: Int, torque: Int): String {
+            val parts = mutableListOf("Z4/Z5+/Z6+ ${z4 / 60}/${z5 / 60}/${z6 / 60} min")
+            if (torque > 0) parts += "Kraft ${torque / 60} min"
+            return parts.joinToString(" · ")
+        }
         val loadSub = when {
             lh.trainedToday && lh.today != null -> lh.today.let {
-                "heute: ${(it.zonedSec / 60).roundToInt()} min · Z4 ${it.z4 / 60} · Z5+ ${it.z5 / 60}" +
-                    (if (it.torque > 0) " · Kraft ${it.torque / 60}" else "") + " min · Last ${it.load}" +
+                "heute ${hm(it.zonedSec)} · ${zoneLine(it.z4, it.z5, it.z6, it.torque)} · Belastung ${it.load}" +
                     " · davor ${lh.consecutiveDays} Trainingstag${if (lh.consecutiveDays == 1) "" else "e"} in Folge"
             }
             lh.yesterday != null -> lh.yesterday.let {
                 (if (it.hasZones)
-                    "gestern: ${(it.zonedSec / 60).roundToInt()} min · Z4 ${it.z4 / 60} · Z5+ ${it.z5 / 60} · Z6+ ${it.z6 / 60} min · Last ${it.load}"
-                else "gestern: ${(it.zonedSec / 60).roundToInt()} min · keine Zonendaten · IF ${f(it.maxIf, 2)} · Last ${it.load}") +
+                    "gestern ${hm(it.zonedSec)} · ${zoneLine(it.z4, it.z5, it.z6, it.torque)} · Belastung ${it.load}"
+                else "gestern ${hm(it.zonedSec)} · keine Zonendaten · IF ${f(it.maxIf, 2)} · Belastung ${it.load}") +
                     " · Monotonie ${f(lh.monotony)}"
             }
             else -> "Monotonie ${f(lh.monotony)} (Foster)"

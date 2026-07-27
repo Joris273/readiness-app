@@ -3,6 +3,7 @@ app/src/main/java/com/readiness/app/ReadinessApp.kt
 app/src/main/java/com/readiness/app/data/ApiModels.kt
 app/src/main/java/com/readiness/app/data/IcuClient.kt
 app/src/main/java/com/readiness/app/data/Json.kt
+app/src/main/java/com/readiness/app/data/RawStore.kt
 app/src/main/java/com/readiness/app/data/SecurePrefs.kt
 app/src/main/java/com/readiness/app/data/Snapshot.kt
 app/src/main/java/com/readiness/app/data/SnapshotMapper.kt
@@ -25,6 +26,7 @@ app/src/main/java/com/readiness/app/ui/Dialogs.kt
 app/src/main/java/com/readiness/app/ui/ProgressionUi.kt
 app/src/main/java/com/readiness/app/ui/ReadinessViewModel.kt
 app/src/main/java/com/readiness/app/ui/Theme.kt
+app/src/main/java/com/readiness/app/widget/ScoreMiniWidget.kt
 app/src/main/java/com/readiness/app/widget/ScoreWidget.kt
 app/src/main/java/com/readiness/app/widget/ScoreWidgetReceiver.kt
 app/src/main/java/com/readiness/app/work/Workers.kt

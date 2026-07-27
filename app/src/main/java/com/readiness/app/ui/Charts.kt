@@ -2,126 +2,195 @@ package com.readiness.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.readiness.app.data.Snapshot
+import kotlin.math.roundToInt
 
 /**
- * Verlaufsdiagramme, direkt mit Canvas gezeichnet.
+ * Verlaufsdiagramme mit Achsenbeschriftung und antippbaren Datenpunkten.
  *
- * Bewusst ohne Diagramm-Bibliothek: die beiden Darstellungen sind einfach genug, und
- * eine zusätzliche Abhängigkeit brächte Versionsrisiko in den Build, ohne etwas zu
- * lösen, was hier nicht in dreißig Zeilen machbar wäre.
+ * Bewusst ohne Diagramm-Bibliothek: die Darstellungen sind einfach genug, und eine
+ * zusätzliche Abhängigkeit brächte Versionsrisiko in den Build.
+ *
+ * Die Werte stehen als Ableseleiste ÜBER dem Diagramm, nicht als schwebende Sprechblase.
+ * Auf einem Telefon verdeckt eine Blase genau die Stelle, die man betrachtet, und der
+ * Finger liegt ohnehin darauf.
  */
 
-private fun DrawScope.polyline(values: List<Double?>, min: Double, max: Double, color: Color, width: Float = 3f) {
+private data class Scale(val min: Double, val max: Double) {
+    val span get() = (max - min).takeIf { it > 1e-9 } ?: 1.0
+    fun y(v: Double, h: Float) = h - ((v - min) / span * h).toFloat()
+}
+
+private fun scaleOf(values: List<Double?>, pad: Double = 0.1, forceZero: Boolean = false): Scale {
+    val vs = values.filterNotNull()
+    if (vs.isEmpty()) return Scale(0.0, 1.0)
+    var lo = vs.min(); var hi = vs.max()
+    if (forceZero) lo = minOf(lo, 0.0)
+    val p = (hi - lo).takeIf { it > 1e-9 }?.times(pad) ?: 1.0
+    return Scale(lo - p, hi + p)
+}
+
+private fun DrawScope.polyline(values: List<Double?>, s: Scale, color: Color, width: Float) {
     if (values.count { it != null } < 2) return
-    val span = (max - min).takeIf { it > 1e-9 } ?: 1.0
     val stepX = size.width / (values.size - 1).coerceAtLeast(1)
-    val path = Path()
-    var started = false
+    val path = Path(); var started = false
     values.forEachIndexed { i, v ->
         if (v == null) { started = false; return@forEachIndexed }
-        val x = i * stepX
-        val y = size.height - ((v - min) / span * size.height).toFloat()
+        val x = i * stepX; val y = s.y(v, size.height)
         if (!started) { path.moveTo(x, y); started = true } else path.lineTo(x, y)
     }
     drawPath(path, color, style = Stroke(width = width, cap = StrokeCap.Round))
 }
 
-private fun DrawScope.zeroLine(min: Double, max: Double, color: Color) {
-    if (min > 0 || max < 0) return
-    val span = (max - min).takeIf { it > 1e-9 } ?: return
-    val y = size.height - ((0.0 - min) / span * size.height).toFloat()
-    drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.5f)
+private fun DrawScope.marker(index: Int, count: Int, color: Color) {
+    val stepX = size.width / (count - 1).coerceAtLeast(1)
+    val x = index * stepX
+    drawLine(color.copy(alpha = .55f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 2f)
 }
 
+private fun DrawScope.dot(index: Int, count: Int, v: Double?, s: Scale, color: Color) {
+    if (v == null) return
+    val stepX = size.width / (count - 1).coerceAtLeast(1)
+    drawCircle(color, radius = 5f, center = Offset(index * stepX, s.y(v, size.height)))
+}
+
+private fun fmt(v: Double?, d: Int = 0) =
+    if (v == null) "–" else String.format("%.${d}f", v).replace('.', ',')
+
+private fun dayLabel(date: String) = date.substring(5).replace('-', '.')
+
+/** Gemeinsames Gerüst: Titel, Legende, Ableseleiste, Y-Achse, Zeichenfläche, X-Achse. */
 @Composable
-private fun ChartCard(title: String, legend: List<Pair<String, Color>>, content: @Composable () -> Unit) {
+private fun ChartFrame(
+    title: String,
+    legend: List<Pair<String, Color>>,
+    readout: String,
+    yLabels: List<String>,
+    xLabels: List<String>,
+    onPick: (Float, Float) -> Unit,
+    draw: DrawScope.() -> Unit,
+) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(T.Panel).padding(14.dp)) {
         Text(title, color = T.Text, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
-        Row(Modifier.padding(top = 4.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             legend.forEach { (label, c) ->
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(c))
                     Text(" $label", color = T.Muted, fontSize = 11.sp)
                 }
             }
         }
-        content()
+        Text(readout, color = T.Text, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+
+        Row(Modifier.fillMaxWidth().height(140.dp)) {
+            // Y-Achse: drei Marken, oben nach unten
+            Column(Modifier.width(38.dp).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End) {
+                yLabels.forEach { Text(it, color = T.Faint, fontSize = 9.5.sp) }
+            }
+            Canvas(Modifier.weight(1f).fillMaxHeight().padding(start = 6.dp)
+                .pointerInput(Unit) { detectTapGestures { onPick(it.x, size.width.toFloat()) } }
+                .pointerInput(Unit) {
+                    detectDragGestures { change, _ -> onPick(change.position.x, size.width.toFloat()) }
+                }
+            ) { draw() }
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 44.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            xLabels.forEach { Text(it, color = T.Faint, fontSize = 9.5.sp) }
+        }
     }
 }
 
-/** Form (TSB) gegen HRV. Zwei Größen mit völlig verschiedenen Einheiten — deshalb
- *  jeweils auf die eigene Spannweite skaliert; verglichen wird der VERLAUF, nicht die Höhe. */
+/** Form (TSB) und HRV. Zwei Größen mit unterschiedlichen Einheiten, jeweils eigene Skala. */
 @Composable
 fun TsbHrvChart(points: List<Snapshot.ChartPoint>) {
     if (points.size < 2) return
+    var sel by remember(points.size) { mutableStateOf(points.lastIndex) }
     val tsb = points.map { it.tsb }
     val hrv = points.map { it.hrv }
-    val tMin = (tsb.filterNotNull().minOrNull() ?: -10.0).coerceAtMost(-5.0)
-    val tMax = (tsb.filterNotNull().maxOrNull() ?: 10.0).coerceAtLeast(5.0)
-    val hMin = hrv.filterNotNull().minOrNull() ?: 0.0
-    val hMax = hrv.filterNotNull().maxOrNull() ?: 1.0
-    ChartCard("Form (TSB) und HRV · 30 Tage",
-        listOf("TSB" to T.hex("#A78BFA"), "HRV" to T.hex("#4CC3FF"))) {
-        Canvas(Modifier.fillMaxWidth().height(130.dp)) {
-            zeroLine(tMin, tMax, T.Line)
-            polyline(hrv, hMin - (hMax - hMin) * 0.2, hMax + (hMax - hMin) * 0.2, T.hex("#4CC3FF"), 2.5f)
-            polyline(tsb, tMin, tMax, T.hex("#A78BFA"), 3f)
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(points.first().date.substring(5).replace('-', '.'), color = T.Faint, fontSize = 10.sp)
-            Text("TSB ${fmt(tMin)} … ${fmt(tMax)} · HRV ${fmt(hMin)}–${fmt(hMax)} ms", color = T.Faint, fontSize = 10.sp)
-            Text(points.last().date.substring(5).replace('-', '.'), color = T.Faint, fontSize = 10.sp)
-        }
+    val sT = scaleOf(tsb, forceZero = true)
+    val sH = scaleOf(hrv, pad = 0.2)
+    val cT = T.hex("#A78BFA"); val cH = T.hex("#4CC3FF")
+    val p = points[sel]
+
+    ChartFrame(
+        title = "Form (TSB) und HRV · 30 Tage",
+        legend = listOf("TSB" to cT, "HRV (ms)" to cH),
+        readout = "${dayLabel(p.date)} · TSB ${fmt(p.tsb, 1)} · HRV ${fmt(p.hrv, 0)} ms",
+        yLabels = listOf(fmt(sT.max, 0), fmt((sT.min + sT.max) / 2, 0), fmt(sT.min, 0)),
+        xLabels = listOf(dayLabel(points.first().date),
+            dayLabel(points[points.size / 2].date), dayLabel(points.last().date)),
+        onPick = { x, w -> sel = ((x / w) * (points.size - 1)).roundToInt().coerceIn(0, points.lastIndex) },
+    ) {
+        // Nulllinie der TSB-Skala als Orientierung
+        if (sT.min <= 0 && sT.max >= 0)
+            drawLine(T.Line, Offset(0f, sT.y(0.0, size.height)), Offset(size.width, sT.y(0.0, size.height)), 1.5f)
+        marker(sel, points.size, T.Muted)
+        polyline(hrv, sH, cH, 2.5f)
+        polyline(tsb, sT, cT, 3f)
+        dot(sel, points.size, points[sel].hrv, sH, cH)
+        dot(sel, points.size, points[sel].tsb, sT, cT)
     }
 }
 
-/** Fitness (CTL), Ermüdung (ATL) und die Tageslast als Balken. */
+/** Fitness (CTL), Ermüdung (ATL) und die Tagesbelastung als Balken. */
 @Composable
 fun LoadChart(points: List<Snapshot.ChartPoint>) {
     if (points.size < 2) return
+    var sel by remember(points.size) { mutableStateOf(points.lastIndex) }
     val ctl = points.map { it.ctl }
     val atl = points.map { it.atl }
     val loads = points.map { it.load }
-    val yMax = maxOf(
-        ctl.filterNotNull().maxOrNull() ?: 0.0,
-        atl.filterNotNull().maxOrNull() ?: 0.0,
+    val hi = maxOf(ctl.filterNotNull().maxOrNull() ?: 0.0, atl.filterNotNull().maxOrNull() ?: 0.0,
         loads.maxOrNull() ?: 0.0, 1.0) * 1.1
-    ChartCard("Fitness, Ermüdung und Tageslast · 30 Tage",
-        listOf("CTL" to T.Green, "ATL" to T.Amber, "Last" to T.hex("#5B6C85"))) {
-        Canvas(Modifier.fillMaxWidth().height(130.dp)) {
-            val stepX = size.width / (points.size - 1).coerceAtLeast(1)
-            val barW = (stepX * 0.55f).coerceAtLeast(2f)
-            loads.forEachIndexed { i, l ->
-                if (l <= 0) return@forEachIndexed
-                val h = (l / yMax * size.height).toFloat()
-                drawRect(T.hex("#5B6C85"), Offset(i * stepX - barW / 2, size.height - h),
-                    androidx.compose.ui.geometry.Size(barW, h))
-            }
-            polyline(atl, 0.0, yMax, T.Amber, 2.5f)
-            polyline(ctl, 0.0, yMax, T.Green, 3f)
+    val s = Scale(0.0, hi)
+    val cBar = T.hex("#5B6C85")
+    val p = points[sel]
+
+    ChartFrame(
+        title = "Fitness, Ermüdung und Tagesbelastung · 30 Tage",
+        legend = listOf("CTL" to T.Green, "ATL" to T.Amber, "Belastung" to cBar),
+        readout = "${dayLabel(p.date)} · CTL ${fmt(p.ctl, 0)} · ATL ${fmt(p.atl, 0)} · " +
+            "TSB ${fmt(p.tsb, 1)} · Belastung ${fmt(p.load, 0)}",
+        yLabels = listOf(fmt(hi, 0), fmt(hi / 2, 0), "0"),
+        xLabels = listOf(dayLabel(points.first().date),
+            dayLabel(points[points.size / 2].date), dayLabel(points.last().date)),
+        onPick = { x, w -> sel = ((x / w) * (points.size - 1)).roundToInt().coerceIn(0, points.lastIndex) },
+    ) {
+        val stepX = size.width / (points.size - 1).coerceAtLeast(1)
+        val barW = (stepX * 0.55f).coerceAtLeast(2f)
+        loads.forEachIndexed { i, l ->
+            if (l <= 0) return@forEachIndexed
+            val h = (l / s.span * size.height).toFloat()
+            drawRect(if (i == sel) cBar.copy(alpha = 1f) else cBar.copy(alpha = .75f),
+                Offset(i * stepX - barW / 2, size.height - h), Size(barW, h))
         }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(points.first().date.substring(5).replace('-', '.'), color = T.Faint, fontSize = 10.sp)
-            Text("Skala 0 … ${fmt(yMax)}", color = T.Faint, fontSize = 10.sp)
-            Text(points.last().date.substring(5).replace('-', '.'), color = T.Faint, fontSize = 10.sp)
-        }
+        marker(sel, points.size, T.Muted)
+        polyline(atl, s, T.Amber, 2.5f)
+        polyline(ctl, s, T.Green, 3f)
+        dot(sel, points.size, points[sel].atl, s, T.Amber)
+        dot(sel, points.size, points[sel].ctl, s, T.Green)
     }
 }
-
-private fun fmt(v: Double) = String.format("%.0f", v)

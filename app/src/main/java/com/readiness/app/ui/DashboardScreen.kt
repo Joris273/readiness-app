@@ -17,6 +17,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +40,7 @@ import com.readiness.app.data.Snapshot
 import com.readiness.app.domain.AnalysisConfig
 import com.readiness.app.domain.Confounders
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     state: UiState,
@@ -61,7 +69,14 @@ fun DashboardScreen(
        abfängt. Deshalb: Hintergrund über die volle Fläche, Inhalt eingerückt.
        safeDrawing deckt Statusleiste, Navigationsleiste und Display-Aussparung
        (Notch/Punch-Hole) gemeinsam ab. */
-    Box(Modifier.fillMaxSize().background(T.Bg)) {
+    /* Ziehen zum Aktualisieren ist auf Android die erwartete Geste. Sie ersetzt das
+       Symbol nicht, sondern ergänzt es — und liefert nebenbei die Rückmeldung, die beim
+       reinen Symboldruck gefehlt hat. */
+    PullToRefreshBox(
+        isRefreshing = state.loading,
+        onRefresh = onReload,
+        modifier = Modifier.fillMaxSize().background(T.Bg),
+    ) {
         Column(
             Modifier.fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -73,7 +88,18 @@ fun DashboardScreen(
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Readiness", color = T.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Einstellungen", tint = T.Text) }
-                IconButton(onReload) { Icon(Icons.Filled.Refresh, "Neu laden", tint = T.Text) }
+                // Sichtbare Rückmeldung: das Symbol dreht sich, solange gearbeitet wird
+                val spin = rememberInfiniteTransition(label = "spin")
+                val angle by spin.animateFloat(
+                    initialValue = 0f, targetValue = 360f,
+                    animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
+                    label = "angle")
+                val busy = state.loading || state.filling
+                IconButton(onReload, enabled = !state.loading) {
+                    Icon(Icons.Filled.Refresh, "Neu laden",
+                        tint = if (busy) T.Green else T.Text,
+                        modifier = if (busy) Modifier.rotate(angle) else Modifier)
+                }
             }
 
             if (state.settings.apiKey.isBlank()) {
@@ -139,7 +165,7 @@ fun DashboardScreen(
         }
     }
 
-    if (showSettings) SettingsDialog(state.settings, { showSettings = false }) { showSettings = false; onSaveSettings(it) }
+    if (showSettings) SettingsDialog(state.settings, state.cacheKb, { showSettings = false }) { showSettings = false; onSaveSettings(it) }
     if (showConfounder && snap?.hrvDate != null)
         ConfounderDialog(snap.hrvDate, snap.confounders, { showConfounder = false }) {
             showConfounder = false; onSetConfounders(snap.hrvDate, it)

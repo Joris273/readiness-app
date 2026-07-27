@@ -23,8 +23,19 @@ data class AnalysisConfig(
     /** Länge eines Vergleichsfensters in Tagen. */
     val windowDays: Int get() = CYCLE_DAYS * cycles.coerceIn(1, 3)
 
-    /** Zu ladende Historie: zwei Fenster plus Puffer für die Baselines. */
+    /** Auswertungstiefe: zwei Fenster plus Puffer für die Baselines. */
     val historyDays: Int get() = 2 * windowDays + 36
+
+    /**
+     * ABGERUFEN wird dagegen immer die maximal mögliche Tiefe, unabhängig von der Auswahl.
+     *
+     * Der Wechsel des Vergleichszeitraums ändert nur, welcher Ausschnitt ausgewertet wird —
+     * nicht, welche Daten es gibt. Holt man jeweils nur das aktuell Nötige, löst jeder Klick
+     * auf „2 Zyklen" einen Neuabruf aus und fühlt sich träge an. Mit dem vollen Fenster ist
+     * jeder Wechsel eine reine Rechenoperation. Der Mehrbedarf sind rund 300 KB je Abruf,
+     * einmalig statt bei jeder Umschaltung.
+     */
+    val fetchDays: Int get() = 2 * (CYCLE_DAYS * 3) + 36
 
     /** Neue Stream-Abrufe je Ladevorgang; skaliert mit der Fensterlänge. */
     val streamBudget: Int get() = 8 + 4 * (cycles.coerceIn(1, 3) - 1)

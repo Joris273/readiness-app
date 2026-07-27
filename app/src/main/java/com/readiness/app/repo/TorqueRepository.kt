@@ -70,7 +70,8 @@ class TorqueRepository(private val client: IcuClient, private val store: TorqueS
      * Tage, weil das Kriterium ausschließlich in die 48-Stunden-Regel eingeht.
      */
     fun detectRecentTorqueWork(sessions: List<Session>, thresholds: Thresholds,
-                               today: LocalDate = LocalDate.now()): List<Session> {
+                               today: LocalDate = LocalDate.now(), allowNetwork: Boolean = true): List<Session> {
+        if (!allowNetwork) return sessions
         val days = setOf(today.toString(), today.minusDays(1).toString())
         return sessions.map { s ->
             if (s.type !in Zones.CYCLING || s.localDate !in days || s.id.isEmpty()) return@map s
