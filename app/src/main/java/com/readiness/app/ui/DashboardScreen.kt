@@ -26,6 +26,7 @@ import com.readiness.app.data.Snapshot
 import com.readiness.app.domain.AnalysisConfig
 import com.readiness.app.domain.Confounders
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DashboardScreen(
     state: UiState,
@@ -39,56 +40,69 @@ fun DashboardScreen(
     var progOpen by remember { mutableStateOf(false) }
     val snap = state.snapshot
 
-    Column(
-        Modifier.fillMaxSize().background(T.Bg).verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 18.dp)
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Readiness", color = T.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Einstellungen", tint = T.Muted) }
-            IconButton(onReload) { Icon(Icons.Filled.Refresh, "Neu laden", tint = T.Muted) }
-        }
-
-        if (state.settings.apiKey.isBlank()) {
-            Spacer(Modifier.height(12.dp))
-            Card2 { Text("Trage zuerst deinen intervals.icu-API-Key unter ⚙ ein.", color = T.Text, fontSize = 14.sp) }
-        }
-
-        snap?.thresholds?.staleMessage?.let {
-            Spacer(Modifier.height(12.dp))
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(T.Amber.copy(alpha = .12f)).padding(12.dp)) {
-                Text("⚠ $it", color = T.Amber, fontSize = 12.5.sp)
+    /* Die Activity zeichnet bewusst randlos (enableEdgeToEdge), damit der Hintergrund
+       bis unter Status- und Navigationsleiste durchläuft. Ohne Inset-Einrückung liegt
+       die Kopfzeile dann aber UNTER der Uhr und der Akkuanzeige — die Schaltflächen
+       sind dort weder sichtbar noch antippbar, weil die Systemleiste die Berührung
+       abfängt. Deshalb: Hintergrund über die volle Fläche, Inhalt eingerückt.
+       safeDrawing deckt Statusleiste, Navigationsleiste und Display-Aussparung
+       (Notch/Punch-Hole) gemeinsam ab. */
+    Box(Modifier.fillMaxSize().background(T.Bg)) {
+        Column(
+            Modifier.fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            // Kopfzeile mit etwas Abstand nach oben; IconButton liefert bereits 48 dp
+            // Grundfläche, was der empfohlenen Mindestgröße für Berührungsziele entspricht.
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Readiness", color = T.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Einstellungen", tint = T.Text) }
+                IconButton(onReload) { Icon(Icons.Filled.Refresh, "Neu laden", tint = T.Text) }
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
-        ScoreCard(snap)
-        Spacer(Modifier.height(12.dp))
-        snap?.let { RecoCard(it) }
-        snap?.progression?.let {
+            if (state.settings.apiKey.isBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Card2 { Text("Trage zuerst deinen intervals.icu-API-Key unter ⚙ ein.", color = T.Text, fontSize = 14.sp) }
+            }
+
+            snap?.thresholds?.staleMessage?.let {
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(T.Amber.copy(alpha = .12f)).padding(12.dp)) {
+                    Text("⚠ $it", color = T.Amber, fontSize = 12.5.sp)
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
-            ProgressionStrip(it) { progOpen = true }
-        }
-        Spacer(Modifier.height(12.dp))
-        snap?.let { TileGrid(it.tiles) }
-
-        snap?.hrvDate?.let { date ->
+            ScoreCard(snap)
             Spacer(Modifier.height(12.dp))
-            ConfounderCard(date, snap.confounders) { showConfounder = true }
-        }
-
-        snap?.progression?.let {
+            snap?.let { RecoCard(it) }
+            snap?.progression?.let {
+                Spacer(Modifier.height(12.dp))
+                ProgressionStrip(it) { progOpen = true }
+            }
             Spacer(Modifier.height(12.dp))
-            ProgressionCard(it, progOpen, { progOpen = !progOpen }, onSetCycles)
+            snap?.let { TileGrid(it.tiles) }
+
+            snap?.hrvDate?.let { date ->
+                Spacer(Modifier.height(12.dp))
+                ConfounderCard(date, snap.confounders) { showConfounder = true }
+            }
+
+            snap?.progression?.let {
+                Spacer(Modifier.height(12.dp))
+                ProgressionCard(it, progOpen, { progOpen = !progOpen }, onSetCycles)
+            }
+
+            if (state.loading) { Spacer(Modifier.height(14.dp)); Centered("Lade Daten …", T.Muted) }
+            else if (state.filling) { Spacer(Modifier.height(14.dp)); Centered("Kraftdaten werden im Hintergrund ergänzt …", T.Faint) }
+            state.error?.let { Spacer(Modifier.height(14.dp)); Centered("Fehler: $it", T.Red) }
+
+            Spacer(Modifier.height(24.dp))
+            Centered("Datenquelle intervals.icu · kein Medizinprodukt", T.Faint, 11.sp)
+            Spacer(Modifier.height(24.dp))
         }
-
-        if (state.loading) { Spacer(Modifier.height(14.dp)); Centered("Lade Daten …", T.Muted) }
-        else if (state.filling) { Spacer(Modifier.height(14.dp)); Centered("Kraftdaten werden im Hintergrund ergänzt …", T.Faint) }
-        state.error?.let { Spacer(Modifier.height(14.dp)); Centered("Fehler: $it", T.Red) }
-
-        Spacer(Modifier.height(24.dp))
-        Centered("Datenquelle intervals.icu · kein Medizinprodukt", T.Faint, 11.sp)
-        Spacer(Modifier.height(24.dp))
     }
 
     if (showSettings) SettingsDialog(state.settings, { showSettings = false }) { showSettings = false; onSaveSettings(it) }
