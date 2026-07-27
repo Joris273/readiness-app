@@ -48,9 +48,15 @@ class TorqueRepository(private val client: IcuClient, private val store: TorqueS
             }
         }
 
-        // Cache auf das Auswertungsfenster begrenzen
-        val live = candidates.map { it.id }.toSet()
-        cache.keys.retainAll(live)
+        /* Cache NICHT auf das aktuelle Fenster begrenzen, sondern auf das größtmögliche.
+           Sonst wirft ein Wechsel auf einen kürzeren Vergleichszeitraum die Daten des
+           längeren weg — und beim Zurückschalten müsste alles erneut geladen werden.
+           Der Mehrbedarf ist mit rund 45 Byte je Einheit vernachlässigbar. */
+        val keepFrom = today.minusDays(2L * AnalysisConfig.CYCLE_DAYS * 3).toString()
+        val keep = sessions.filter {
+            it.type in Zones.CYCLING && it.id.isNotEmpty() && it.localDate >= keepFrom
+        }.map { it.id }.toSet()
+        cache.keys.retainAll(keep)
         store.save(cache)
 
         val enriched = sessions.map { s -> cache[s.id]?.let { s.copy(torque = it.toDomain()) } ?: s }

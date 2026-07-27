@@ -29,7 +29,11 @@ data class Snapshot(
     val hrvDate: String? = null,
     val confounders: List<String> = emptyList(),
     val progression: Progression? = null,
+    val chart: List<ChartPoint> = emptyList(),
 ) {
+    @Serializable data class ChartPoint(
+        val date: String, val ctl: Double? = null, val atl: Double? = null,
+        val tsb: Double? = null, val hrv: Double? = null, val load: Double = 0.0)
     @Serializable data class Component(
         val id: String, val name: String, val weightPct: Int, val sub: Int?,
         val explanation: String, val colorHex: String)

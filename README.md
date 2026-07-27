@@ -12,6 +12,16 @@ HTML-Prototyps mit den Befunden aus dem Architektur- und Formel-Audit.
    wissenschaftliche Prüfung fehl, entsteht keine APK.
 4. APK herunterladen unter **Actions → letzter Lauf → Artifacts → readiness-debug-apk**.
 
+## Signierung
+
+`app/debug.keystore` gehört **in das Repo** und darf nicht gelöscht werden. Ohne ihn
+erzeugt jeder Actions-Lauf einen neuen Debug-Schlüssel; Android lehnt die Aktualisierung
+dann mit `INSTALL_FAILED_UPDATE_INCOMPATIBLE` ab und die App müsste vor jedem Update
+deinstalliert werden — mitsamt API-Key, Einstellungen und Kraftdaten-Cache.
+
+Es handelt sich um einen reinen Debug-Schlüssel für den Eigengebrauch (Sideload). Für eine
+Veröffentlichung im Play Store bräuchte es einen separaten, geheim gehaltenen Release-Schlüssel.
+
 ## Erststart
 
 - API-Key unter ⚙ eintragen (intervals.icu → Settings → Developer).

@@ -91,6 +91,9 @@ object SnapshotMapper {
             hrvDate = m.hrvDate,
             confounders = cfg.confounders[m.hrvDate].orEmpty(),
             progression = mapProgression(r.progression, cfg),
+            chart = r.chart.map {
+                Snapshot.ChartPoint(it.date, it.ctl, it.atl, it.tsb, it.hrv, it.load)
+            },
         )
     }
 

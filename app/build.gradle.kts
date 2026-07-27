@@ -13,13 +13,33 @@ android {
         applicationId = "com.readiness.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.1"
+        versionCode = 4
+        versionName = "2.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
+    /* Fester Debug-Schlüssel statt des automatisch erzeugten.
+       Jeder GitHub-Actions-Lauf startet auf einem frischen Rechner und legt sich sonst
+       einen NEUEN Debug-Keystore an. Android verweigert dann jede Aktualisierung mit
+       INSTALL_FAILED_UPDATE_INCOMPATIBLE, weil die Signatur nicht zur installierten
+       Version passt — man müsste die App vor jedem Update deinstallieren und verlöre
+       dabei API-Key, Einstellungen und den Kraftdaten-Cache. Mit einem mitgelieferten
+       Schlüssel sind alle Builds signaturgleich und lassen sich normal überschreiben.
+       Das ist KEIN Freigabeschlüssel: er taugt nur zum Sideload, nicht für den Play Store. */
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
-        debug { isMinifyEnabled = false }
+        debug {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

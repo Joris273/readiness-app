@@ -216,6 +216,16 @@ data class Progression(
     val torqueScan: TorqueScan? = null,
 )
 
+/** Ein Tagespunkt für die Verlaufsdiagramme. */
+data class ChartPoint(
+    val date: String,
+    val ctl: Double? = null,
+    val atl: Double? = null,
+    val tsb: Double? = null,
+    val hrv: Double? = null,
+    val load: Double = 0.0,
+)
+
 /** Das vollständige Auswertungsergebnis der Domänenschicht. */
 data class ReadinessResult(
     val score: Int?,
@@ -228,4 +238,5 @@ data class ReadinessResult(
     val recommendation: Recommendation,
     val thresholds: Thresholds,
     val progression: Progression,
+    val chart: List<ChartPoint> = emptyList(),
 )

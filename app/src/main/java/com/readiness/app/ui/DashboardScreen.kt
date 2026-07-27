@@ -1,6 +1,12 @@
 package com.readiness.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,7 +32,7 @@ import com.readiness.app.data.Snapshot
 import com.readiness.app.domain.AnalysisConfig
 import com.readiness.app.domain.Confounders
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     state: UiState,
@@ -39,6 +45,14 @@ fun DashboardScreen(
     var showConfounder by remember { mutableStateOf(false) }
     var progOpen by remember { mutableStateOf(false) }
     val snap = state.snapshot
+
+    /* Tippen auf den Kompaktstreifen soll zur Detailkarte springen. Der naive Weg über
+       gemerkte Y-Koordinaten geht schief, sobald sich darüber liegende Karten in der Höhe
+       ändern — etwa wenn die Zusammensetzung aufgeklappt ist oder eine Warnzeile
+       erscheint. BringIntoViewRequester rechnet die Position zum Zeitpunkt des Aufrufs
+       aus und trifft deshalb immer. */
+    val bring = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
 
     /* Die Activity zeichnet bewusst randlos (enableEdgeToEdge), damit der Hintergrund
        bis unter Status- und Navigationsleiste durchläuft. Ohne Inset-Einrückung liegt
@@ -76,11 +90,21 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(12.dp))
             ScoreCard(snap)
+
+            // Schwellenwerte direkt unter dem Zustand — sie ordnen alle Zonenangaben ein
+            snap?.thresholds?.let {
+                Spacer(Modifier.height(10.dp))
+                ThresholdChips(it)
+            }
+
             Spacer(Modifier.height(12.dp))
             snap?.let { RecoCard(it) }
             snap?.progression?.let {
                 Spacer(Modifier.height(12.dp))
-                ProgressionStrip(it) { progOpen = true }
+                ProgressionStrip(it) {
+                    progOpen = true
+                    scope.launch { bring.bringIntoView() }
+                }
             }
             Spacer(Modifier.height(12.dp))
             snap?.let { TileGrid(it.tiles) }
@@ -92,7 +116,17 @@ fun DashboardScreen(
 
             snap?.progression?.let {
                 Spacer(Modifier.height(12.dp))
-                ProgressionCard(it, progOpen, { progOpen = !progOpen }, onSetCycles)
+                Box(Modifier.bringIntoViewRequester(bring)) {
+                    ProgressionCard(it, progOpen, { progOpen = !progOpen }, onSetCycles)
+                }
+            }
+
+            // Verlaufsdiagramme
+            snap?.chart?.takeIf { it.size >= 2 }?.let { pts ->
+                Spacer(Modifier.height(12.dp))
+                TsbHrvChart(pts)
+                Spacer(Modifier.height(12.dp))
+                LoadChart(pts)
             }
 
             if (state.loading) { Spacer(Modifier.height(14.dp)); Centered("Lade Daten …", T.Muted) }
@@ -140,8 +174,14 @@ private fun ScoreCard(snap: Snapshot?) {
         snap?.let {
             Text((if (it.renormalized) "Teilweise fehlende Daten — Gewichte neu normiert · " else "") + "Datenstand ${it.dataDate}",
                 color = T.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-            TextButton({ open = !open }) {
-                Text(if (open) "Zusammensetzung verbergen ▴" else "Zusammensetzung anzeigen ▾", color = T.Text, fontSize = 13.sp)
+            OutlinedButton(
+                onClick = { open = !open },
+                border = BorderStroke(1.dp, T.Line),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = T.Text),
+                modifier = Modifier.padding(top = 10.dp),
+            ) {
+                Text(if (open) "Zusammensetzung verbergen ▴" else "Zusammensetzung anzeigen ▾", fontSize = 13.sp)
             }
             if (open) Column(Modifier.fillMaxWidth()) {
                 it.components.forEach { c -> ComponentRow(c) }
@@ -178,6 +218,27 @@ private fun RecoCard(snap: Snapshot) {
         Column(Modifier.padding(start = 12.dp)) {
             Text(snap.recoTitle, color = T.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Text(snap.recoText, color = T.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ThresholdChips(t: Snapshot.Thresholds) {
+    val items = buildList {
+        t.outdoorFtp?.let { add("FTP outdoor $it W") }
+        t.indoorFtp?.let { add("FTP indoor $it W") }
+        t.eftp?.let { add("eFTP $it W") }
+        t.lthr?.let { add("LTHR $it") }
+        t.maxHr?.let { add("HF max $it") }
+    }
+    if (items.isEmpty()) return
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.forEach {
+            Text(it, color = T.Text, fontSize = 11.sp,
+                modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(T.Chip)
+                    .padding(horizontal = 10.dp, vertical = 5.dp))
         }
     }
 }

@@ -99,10 +99,28 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
+    /**
+     * Zyklenwechsel: erst die Auswahl sofort sichtbar machen, dann neu auswerten.
+     *
+     * Der Wechsel ändert nur den Auswertungszeitraum, nicht die Rohdaten. Reicht die
+     * bereits geladene Historie tief genug, wird ohne Netzabruf gerechnet — das ist der
+     * Unterschied zwischen „spürbar träge" und „sofort".
+     */
     fun setCycles(n: Int) {
+        if (n == repo.settings.cycles) return
+        fillJob?.cancel()
         repo.settings.cycles = n
-        _state.value = _state.value.copy(settings = _state.value.settings.copy(cycles = n))
-        refresh()
+        _state.value = _state.value.copy(
+            settings = _state.value.settings.copy(cycles = n), loading = true, error = null)
+        viewModelScope.launch {
+            try {
+                val (snap, _) = withContext(Dispatchers.IO) { repo.refresh(allowCache = true) }
+                _state.value = _state.value.copy(snapshot = snap, loading = false)
+                startBackgroundFill()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(loading = false, error = e.message ?: "Fehler beim Laden")
+            }
+        }
     }
 
     fun setConfounders(date: String, causes: List<String>) {

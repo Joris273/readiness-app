@@ -19,6 +19,7 @@ app/src/main/java/com/readiness/app/domain/Zones.kt
 app/src/main/java/com/readiness/app/repo/IcuRepository.kt
 app/src/main/java/com/readiness/app/repo/ReadinessRepository.kt
 app/src/main/java/com/readiness/app/repo/TorqueRepository.kt
+app/src/main/java/com/readiness/app/ui/Charts.kt
 app/src/main/java/com/readiness/app/ui/DashboardScreen.kt
 app/src/main/java/com/readiness/app/ui/Dialogs.kt
 app/src/main/java/com/readiness/app/ui/ProgressionUi.kt
