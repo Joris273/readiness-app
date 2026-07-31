@@ -31,8 +31,16 @@ jobs:
       # Folgefehler, aus denen die Ursache kaum erkennbar ist. Hier wird sie benannt.
       - name: Projektstand pruefen
         run: |
+          if [ ! -f tools/expected-files.txt ]; then
+            echo "::error::tools/expected-files.txt fehlt im Repo."
+            echo "Der Ordner tools/ wurde beim Hochladen nicht mituebertragen."
+            echo "Vorhandene Ordner im Projektstamm:"
+            ls -1 | sed 's/^/  /'
+            exit 1
+          fi
           find app/src -name '*.kt' | sort > /tmp/actual.txt
           sort tools/expected-files.txt -o /tmp/expected.txt
+          echo "Erwartet: $(wc -l < /tmp/expected.txt) Dateien | vorhanden: $(wc -l < /tmp/actual.txt)"
           extra=$(comm -13 /tmp/expected.txt /tmp/actual.txt)
           missing=$(comm -23 /tmp/expected.txt /tmp/actual.txt)
           rc=0
