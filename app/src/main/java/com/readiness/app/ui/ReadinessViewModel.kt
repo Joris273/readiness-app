@@ -30,6 +30,8 @@ data class SettingsState(
     val apiKey: String = "", val athlete: String = "0",
     val cycles: Int = 1, val sleepNeed: String = "",
     val widgetAutoUpdate: Boolean = true,
+    /** Damit im Zweifel nachprüfbar ist, welcher Stand tatsächlich läuft. */
+    val appVersion: String = "",
 )
 
 class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
@@ -48,8 +50,15 @@ class ReadinessViewModel(app: Application) : AndroidViewModel(app) {
     private fun readSettings() = with(repo.settings) {
         SettingsState(apiKey, athlete, cycles,
             sleepNeedHours?.let { String.format("%.2f", it).trimEnd('0').trimEnd('.', ',') } ?: "",
-            widgetAutoUpdate)
+            widgetAutoUpdate, appVersion())
     }
+
+    /** Versionsname aus dem Paketmanager — verlässlicher als eine gepflegte Konstante. */
+    private fun appVersion(): String = runCatching {
+        val ctx = getApplication<Application>()
+        val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+        "${info.versionName} (${@Suppress("DEPRECATION") info.versionCode})"
+    }.getOrDefault("")
 
     fun refresh() {
         if (_state.value.loading) return

@@ -118,6 +118,9 @@ data class DayStat(
     val zonedSec: Double, val load: Int, val maxIf: Double, val hasZones: Boolean,
 )
 
+/** Welches System der letzte Qualitätsreiz vorwiegend belastet hat. */
+enum class StimulusType { NONE, VO2MAX, THRESHOLD, VOLUME, MIXED }
+
 data class LoadHistory(
     val deduction: Int,
     val notes: List<String>,
@@ -134,6 +137,12 @@ data class LoadHistory(
     val hardToday: Boolean,
     val todayReasons: List<String>,
     val today: DayStat?,
+    /** Aufeinanderfolgende Tage mit Qualitätsreiz, heute rückwärts gezählt. */
+    val qualityStreak: Int = 0,
+    val yesterdayType: StimulusType = StimulusType.NONE,
+    val todayType: StimulusType = StimulusType.NONE,
+    /** Relative Größe des gestrigen Reizes, 0..1 — Grundlage der abgestuften Bewertung. */
+    val yesterdaySeverity: Double = 0.0,
 )
 
 data class ScoreComponent(
@@ -204,6 +213,11 @@ data class Progression(
     val share12: Double? = null, val share3: Double? = null, val share4: Double? = null,
     val zoneHours: Double? = null,
     val hrvChronNow: Double? = null, val hrvChronPrev: Double? = null, val hrvChronDeltaPct: Double? = null,
+    /* Aerobe Entkopplung (Seiler): wurde berechnet und floss ins Verdikt ein, fehlte aber
+       im Ergebnis — und damit in der Anzeige. Der Nutzer sah einen Marker im Urteil, den
+       er nirgends nachvollziehen konnte. */
+    val decNow: Double? = null, val decPrev: Double? = null,
+    val decDeltaPp: Double? = null, val decN: Int = 0, val decNPrev: Int = 0,
     val durations: List<DurationProgress> = emptyList(),
     val lcEfNow: Double? = null, val lcEfPrev: Double? = null,
     val lcEfDeltaPct: Double? = null, val lcEfN: Int = 0, val lcEfNPrev: Int = 0, val lcEfThin: Boolean = true,

@@ -230,19 +230,78 @@ object ScoreEngine {
     private val GREEN = Level(Verdict.GREEN, "#3DDC97", "Grünes Licht für Intensität",
         "Erholung, Form und Belastungsmuster passen. Schwellenintervalle, VO2max oder ein langer Grundlagenblock sind heute gut platziert.")
 
-    fun buildRecommendation(score: Int?, m: Metrics, lh: LoadHistory, limits: List<LimitingFactor>): Recommendation {
+    /**
+     * @param score angezeigter Tageswert (Basis abzüglich Belastung) — nur für die Texte
+     * @param baseScore reiner Erholungszustand aus den Messwerten, OHNE Belastungsabzug
+     *
+     * Die Ampel richtet sich nach dem BASISWERT, nicht nach dem angezeigten Score.
+     * Andernfalls wirkt die Belastung doppelt: einmal, indem sie den Score senkt, und
+     * ein zweites Mal über die Belastungsregeln unten. Genau das hätte einen zweiten
+     * Qualitätstag allein rechnerisch verhindert, obwohl die Marker ihn erlauben — und
+     * damit wieder die starre Abstandsregel durch die Hintertür eingeführt.
+     *
+     * Die Aufgabenteilung ist deshalb: die Messwerte sagen, wie erholt du BIST; die
+     * Belastungsregeln sagen, was angesichts des zuletzt Trainierten SINNVOLL ist.
+     */
+    fun buildRecommendation(score: Int?, m: Metrics, lh: LoadHistory, limits: List<LimitingFactor>,
+                            comps: List<ScoreComponent> = emptyList(), baseScore: Int? = null): Recommendation {
         if (score == null) return Recommendation(Verdict.UNKNOWN, "#8A97A8", "Zu wenig Daten",
             "Es liegen nicht genug Messwerte vor, um eine Empfehlung abzuleiten.")
 
-        var r = if (score >= 78) GREEN else if (score >= 58) AMBER else RED
+        val band = baseScore ?: score
+        var r = if (band >= 78) GREEN else if (band >= 58) AMBER else RED
         val notes = mutableListOf<String>()
 
         if (m.tsb != null && m.tsb < -20) { r = RED; notes += "TSB unter −20 (tiefe Ermüdung)" }
         if (lh.forceRest) { r = RED; notes += "Belastungsmuster + Erholungslage sprechen für Pause (${lh.notes.joinToString(", ")})" }
         else if (lh.capIntensity && r == GREEN) {
-            r = AMBER
-            notes += if (lh.hardYesterday) "gestern harter Reiz — heute kein zweiter Intensitätstag (48-h-Regel), Grundlage ist ok"
-                     else "gestern sehr großer Umfangstag — heute Grundlage statt Intensität"
+            /* Hier stand zuvor eine starre 48-Stunden-Regel: gestern hart, also heute
+               höchstens Grundlage. Die Trainingsliteratur trägt das für gut Trainierte
+               nicht. Rønnestad und Kollegen zeigen, dass Blöcke mit HIT an
+               aufeinanderfolgenden Tagen bei gleichem Gesamtumfang GRÖSSERE Zuwächse in
+               VO2max und Leistung bringen als die klassische Verteilung auf zwei
+               getrennte Tage pro Woche. Und die Studien zur HRV-gesteuerten Steuerung
+               (Vesterinen, Meta-Analyse Düking) treffen die Entscheidung nicht am
+               Kalender, sondern an den Erholungsmarkern: liegt die HRV im individuellen
+               Normalband, ist ein Qualitätsreiz erlaubt — auch am Folgetag.
+
+               Deshalb entscheidet jetzt die gemessene Erholung, nicht der Abstand. Ein
+               zweiter Qualitätstag ist zulässig, wenn die Marker unauffällig sind; er
+               wird nur gedeckelt, wenn sie es nicht sind. Als Sicherung bleibt die
+               Blockgrenze: nach drei Qualitätstagen in Folge ist Erholung fällig, denn
+               genau so sind die Blöcke in den Studien aufgebaut — Verdichtung UND
+               anschließende echte Entlastung. */
+            val recoveryClear = !m.hrvSuppressed && !m.hrvWeekAlarm &&
+                (m.restingHrDiff == null || m.restingHrDiff < 2.0) &&
+                (comps.firstOrNull { it.id == "sleep" }?.sub ?: 100) >= 60 &&
+                (m.tsb == null || m.tsb > -15) &&
+                limits.none { it.severity == Severity.RED }
+
+            if (lh.qualityStreak >= 3) {
+                r = AMBER
+                notes += "dritter Qualitätstag in Folge — hier endet auch in der Blockmethodik der " +
+                    "Verdichtungsblock; jetzt Entlastung, sonst kippt der Reiz in unproduktive Ermüdung"
+            } else if (!lh.hardYesterday) {
+                r = AMBER
+                notes += "gestern sehr großer Umfangstag — heute Grundlage statt Intensität"
+            } else if (!recoveryClear) {
+                r = AMBER
+                notes += "gestern harter Reiz und die Erholungsmarker sind nicht unauffällig — " +
+                    "heute Grundlage; ein zweiter Qualitätstag wäre erst bei klarer Erholungslage sinnvoll"
+            } else {
+                // Marker unauffällig: Qualität bleibt möglich, aber mit anderem Schwerpunkt
+                val suggestion = when (lh.yesterdayType) {
+                    StimulusType.VO2MAX -> "Gestern lag der Reiz bei VO2max. Heute ist ein zweiter Qualitätstag " +
+                        "vertretbar, sinnvollerweise mit anderem Schwerpunkt — Schwelle oder Tempo statt erneut " +
+                        "kurzer Maximalintervalle."
+                    StimulusType.THRESHOLD -> "Gestern lag der Reiz an der Schwelle. Heute wären kurze VO2max-Intervalle " +
+                        "die sinnvollere Ergänzung als ein zweiter Schwellenblock."
+                    StimulusType.VOLUME -> "Gestern war vor allem Umfang. Ein Intensitätsreiz ist heute vertretbar."
+                    else -> "Ein zweiter Qualitätstag ist heute vertretbar."
+                }
+                notes += "$suggestion Danach ist ein Entlastungstag fällig " +
+                    "(${lh.qualityStreak + 1}. Qualitätstag in Folge)"
+            }
         }
         if (m.hrvSuppressed && !m.confounded && r == GREEN) { r = AMBER; notes += "HRV unter der individuellen Normalbandbreite" }
 

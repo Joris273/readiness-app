@@ -82,6 +82,41 @@ object LoadHistoryAnalyzer {
            harter Trainingstag sein. */
         fun isHard(o: DayLoad?) = isTrain(o) && reasons(o).isNotEmpty()
         fun isBig(o: DayLoad?) = o != null && o.load >= 1.5 * ctlSafe
+
+        /* Reiztyp bestimmen. Ein VO2max-Block und eine Schwelleneinheit belasten
+           unterschiedliche Systeme — das ist die Grundlage dafür, am Folgetag einen
+           ERGÄNZENDEN statt eines gleichartigen Reizes vorzuschlagen. */
+        fun typeOf(o: DayLoad?): StimulusType {
+            if (o == null || !isHard(o)) return StimulusType.NONE
+            /* Verglichen werden NORMIERTE Anteile, nicht rohe Sekunden.
+               Sechs Minuten Z5+ und zwanzig Minuten Z4 sind nach unseren eigenen
+               Kriterien gleichwertige Reize — ein direkter Sekundenvergleich benachteiligt
+               deshalb systematisch die kurzen, harten Intervalle. An einer echten
+               VO2max-Einheit mit 581 s Z5+ und 407 s Z4 fiel das auf: der Sekundenvergleich
+               ergab „gemischt", obwohl der Z5+-Anteil gemessen an seiner Referenz fast
+               viermal so hoch liegt. */
+            val vo2 = (o.z5plus / 900.0)
+            val thr = ((o.z4 + o.torque) / 2400.0)
+            val vol = if (isBig(o)) 1.0 else 0.0
+            return when {
+                vo2 == 0.0 && thr == 0.0 -> if (vol > 0) StimulusType.VOLUME else StimulusType.MIXED
+                vo2 >= 1.5 * thr -> StimulusType.VO2MAX
+                thr >= 1.5 * vo2 -> StimulusType.THRESHOLD
+                else -> StimulusType.MIXED
+            }
+        }
+
+        /* Schweregrad des Reizes als relatives Maß statt eines pauschalen Abzugs.
+           Zehn Minuten Z5+ sind ein anderer Reiz als vierzig Minuten Schwelle, und ein
+           Flachabzug behandelte beide gleich. Die Bezugsgrößen entsprechen dem, was in
+           der Praxis eine volle Qualitätseinheit ausmacht. */
+        fun severityOf(o: DayLoad?): Double {
+            if (o == null || !isHard(o)) return 0.0
+            val vo2 = (o.z5plus / 900.0).coerceAtMost(1.0)          // 15 min Z5+ = voll
+            val thr = ((o.z4 + o.torque) / 2400.0).coerceAtMost(1.0) // 40 min Schwelle = voll
+            val vol = (o.load / (1.5 * ctlSafe)).coerceAtMost(1.0)
+            return (maxOf(vo2, thr) * 0.75 + vol * 0.25).coerceIn(0.0, 1.0)
+        }
         fun stat(o: DayLoad?) = o?.let {
             DayStat(it.z5plus, it.z6plus, it.z4, it.torque, it.zonedSec, it.load.roundToInt(), it.maxIf, it.hasZones)
         }
@@ -93,6 +128,14 @@ object LoadHistoryAnalyzer {
 
         var consec = 0
         for (i in 1..10) { if (isTrain(byDay[i])) consec++ else break }
+
+        /* Aufeinanderfolgende Qualitätstage — Grundlage der Blockbegrenzung.
+           Gezählt wird ab dem letzten Tag MIT Reiz: solange heute noch nicht trainiert
+           wurde, beginnt die Serie bei gestern. Andernfalls stünde die Serie den ganzen
+           Vormittag auf null und die Blockgrenze griffe nie. */
+        var qStreak = 0
+        val qStart = if (isHard(byDay[0])) 0 else 1
+        for (i in qStart..10) { if (isHard(byDay[i])) qStreak++ else break }
 
         val daily = (0..6).map { byDay[it]?.load ?: 0.0 }
         val mean = daily.sum() / 7
@@ -109,11 +152,20 @@ object LoadHistoryAnalyzer {
             consec == 4 && monotony > 2 -> { ded += 4; notes += "4 Trainingstage bei hoher Monotonie" }
         }
         val hardWhy = if (hardY) reasons(yO) else emptyList()
-        if (hardY) { ded += 6; notes += "gestern intensiv — 48-h-Regel (${hardWhy.joinToString(", ")})" }
+        val severity = severityOf(yO)
+        if (hardY) {
+            /* Abzug proportional zum Reiz statt pauschal: eine kurze VO2max-Serie kostet
+               weniger Erholung als ein voller Schwellenblock. Der Score bildet damit ab,
+               wie viel von gestern noch verarbeitet wird — die Entscheidung, ob heute
+               trotzdem Qualität möglich ist, trifft die Empfehlung anhand der Marker. */
+            val d = (4 + 10 * severity).roundToInt()
+            ded += d
+            notes += "gestern intensiv (${hardWhy.joinToString(", ")})"
+        }
         if (monotony > 2 && weekLoad > chronic) {
             ded += 6; notes += "hohe Monotonie ${String.format("%.1f", monotony).replace('.', ',')} bei hoher Wochenlast"
         }
-        ded = min(20, ded)
+        ded = min(26, ded)
 
         return LoadHistory(
             deduction = ded, notes = notes, consecutiveDays = consec,
@@ -124,6 +176,8 @@ object LoadHistoryAnalyzer {
             hardReasons = hardWhy, yesterday = stat(yO),
             trainedToday = isTrain(todayO), hardToday = isHard(todayO),
             todayReasons = if (isHard(todayO)) reasons(todayO) else emptyList(), today = stat(todayO),
+            qualityStreak = qStreak, yesterdayType = typeOf(yO), todayType = typeOf(todayO),
+            yesterdaySeverity = severity,
         )
     }
 }

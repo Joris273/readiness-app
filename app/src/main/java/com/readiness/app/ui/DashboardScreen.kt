@@ -168,7 +168,12 @@ fun DashboardScreen(
             state.error?.let { Spacer(Modifier.height(14.dp)); Centered("Fehler: $it", T.Red) }
 
             Spacer(Modifier.height(24.dp))
-            Centered("Datenquelle intervals.icu · kein Medizinprodukt", T.Faint, 11.sp)
+            /* Version direkt in der Fußzeile, nicht nur im Einstellungsdialog.
+               Ein falsch installierter Stand hat schon zweimal zu einer Fehlersuche am
+               Modell geführt, obwohl schlicht eine ältere APK lief. Die Zahl gehört
+               dorthin, wo man sie ohne Suchen sieht. */
+            Centered("Readiness ${state.settings.appVersion} · Datenquelle intervals.icu · kein Medizinprodukt",
+                T.Faint, 11.sp)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -206,8 +211,11 @@ private fun ScoreCard(snap: Snapshot?) {
             }
         }
         snap?.let {
+            it.scoreContext?.let { ctx ->
+                Text(ctx, color = T.Text, fontSize = 11.5.sp, modifier = Modifier.padding(top = 8.dp))
+            }
             Text((if (it.renormalized) "Teilweise fehlende Daten — Gewichte neu normiert · " else "") + "Datenstand ${it.dataDate}",
-                color = T.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                color = T.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
             OutlinedButton(
                 onClick = { open = !open },
                 border = BorderStroke(1.dp, T.Line),

@@ -4,6 +4,7 @@ app/src/main/java/com/readiness/app/data/ApiModels.kt
 app/src/main/java/com/readiness/app/data/IcuClient.kt
 app/src/main/java/com/readiness/app/data/Json.kt
 app/src/main/java/com/readiness/app/data/RawStore.kt
+app/src/main/java/com/readiness/app/data/ScoreHistoryStore.kt
 app/src/main/java/com/readiness/app/data/SecurePrefs.kt
 app/src/main/java/com/readiness/app/data/Snapshot.kt
 app/src/main/java/com/readiness/app/data/SnapshotMapper.kt

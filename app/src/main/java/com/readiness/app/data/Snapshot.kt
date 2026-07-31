@@ -29,6 +29,8 @@ data class Snapshot(
     val hrvDate: String? = null,
     val confounders: List<String> = emptyList(),
     val napMinutesToday: Int = 0,
+    /** Einordnung in die eigene Verteilung — ohne sie wirkt jeder Wert pauschal hoch. */
+    val scoreContext: String? = null,
     val progression: Progression? = null,
     val chart: List<ChartPoint> = emptyList(),
 ) {

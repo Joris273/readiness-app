@@ -28,7 +28,11 @@ fun SettingsDialog(s: SettingsState, cacheKb: Long, onDismiss: () -> Unit, onSav
                 sleepNeed = need.trim(), widgetAutoUpdate = auto)) }) { Text("Speichern & laden") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Abbrechen") } },
-        title = { Text("Einstellungen") },
+        title = { Column {
+            Text("Einstellungen")
+            if (s.appVersion.isNotBlank())
+                Text("Version ${s.appVersion}", color = T.Muted, fontSize = 11.sp)
+        } },
         text = {
             Column {
                 OutlinedTextField(key, { key = it }, label = { Text("intervals.icu API-Key") }, singleLine = true)

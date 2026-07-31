@@ -25,7 +25,7 @@ object ReadinessEngine {
         val base = ScoreEngine.buildScore(metrics)
         val limits = ScoreEngine.limitingFactors(base.components, metrics)
         val score = base.total?.let { maxOf(0, it - load.deduction) }
-        val reco = ScoreEngine.buildRecommendation(score, metrics, load, limits)
+        val reco = ScoreEngine.buildRecommendation(score, metrics, load, limits, base.components, base.total)
         val prog = ProgressionAnalyzer.analyze(wellness, sessions, cfg, today, torqueScan)
         val chart = buildChart(wellness, sessions, today)
 

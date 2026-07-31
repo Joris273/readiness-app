@@ -182,7 +182,14 @@ object ProgressionAnalyzer {
         val markers = mutableListOf<MarkerDelta>()
         pct(if (eNow > 0) eNow else null, if (ePrev > 0) ePrev else null)?.let { markers += MarkerDelta("eFTP", it) }
         efDelta?.let { markers += MarkerDelta("aerobe Effizienz", it) }
-        decDelta?.let { markers += MarkerDelta("Entkopplung", -it * 2) }        // fallend = gut
+        /* Entkopplung fällt ohne Verstärkungsfaktor ein: Ein Prozentpunkt zählt wie ein
+           Prozent, nicht wie zwei. Der frühere Faktor 2 war willkürlich gesetzt und hat
+           sich an einem Jahr echter Daten als klar zu großzügig erwiesen — die Entkopplung
+           streut dort mit 6,4 Prozentpunkten um einen Median von 1,5 %, ist also der mit
+           Abstand verrauschteste der vier Marker (die aerobe Effizienz kommt auf 7,5 %
+           relative Streuung). Verdoppelt trug sie damit wiederholt allein ein Verdikt,
+           obwohl der Unterschied im Rauschen lag. */
+        decDelta?.let { markers += MarkerDelta("Entkopplung", -it) }             // fallend = gut
         durations.forEach { d -> if (!d.thin && d.deltaPct != null) markers += MarkerDelta(d.label, d.deltaPct) }
         if (!lcEfThin && lcEfDelta != null) markers += MarkerDelta("Kraft-Effizienz", lcEfDelta)
 
@@ -257,6 +264,8 @@ object ProgressionAnalyzer {
             share4 = if (zTot > 0) z4p * 100.0 / zTot else null,
             zoneHours = if (zTot > 0) zTot / 3600.0 else null,
             hrvChronNow = hrvChronNow, hrvChronPrev = hrvChronPrev, hrvChronDeltaPct = chronDelta,
+            decNow = decNow, decPrev = decPrev, decDeltaPp = decDelta,
+            decN = dcNow.size, decNPrev = dcPrev.size,
             durations = durations,
             lcEfNow = median(lcEfN), lcEfPrev = median(lcEfP), lcEfDeltaPct = lcEfDelta,
             lcEfN = lcEfN.size, lcEfNPrev = lcEfP.size, lcEfThin = lcEfThin,

@@ -4,6 +4,7 @@ import android.content.Context
 import com.readiness.app.data.IcuClient
 import com.readiness.app.data.RawBundle
 import com.readiness.app.data.RawStore
+import com.readiness.app.data.ScoreHistoryStore
 import com.readiness.app.data.SecurePrefs
 import com.readiness.app.data.Snapshot
 import com.readiness.app.data.SnapshotMapper
@@ -30,6 +31,7 @@ class ReadinessRepository(context: Context) {
     private val torque = TorqueRepository(client, torqueStore)
     private val snapshots = SnapshotStore(context)
     private val rawStore = RawStore(context)
+    private val scoreHistory = ScoreHistoryStore(context)
 
     private var memRaw: RawBundle? = null
 
@@ -68,7 +70,14 @@ class ReadinessRepository(context: Context) {
         val enriched = torque.enrich(withWork, mapped.thresholds, cfg, today, streamBudget)
         val result = ReadinessEngine.evaluate(
             mapped.wellness, enriched.sessions, mapped.thresholds, cfg, today, enriched.scan)
-        val snap = SnapshotMapper.map(result, cfg)
+
+        // Tageswert festhalten und gegen die eigene Verteilung einordnen
+        val dateKey = result.metrics.dataDate ?: today.toString()
+        scoreHistory.record(dateKey, result.score, today.minusDays(180).toString())
+        val ctx = scoreHistory.classify(result.score, dateKey)?.let {
+            "${it.label} · Perzentil ${it.percentile} deiner letzten ${it.days} Tage (Median ${it.median})"
+        }
+        val snap = SnapshotMapper.map(result, cfg, ctx)
         snapshots.save(snap)
         return snap to result
     }

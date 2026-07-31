@@ -79,16 +79,23 @@ class CrossCheckTest {
 
     println("\n=== BELASTUNGSERKENNUNG ===")
     check("Normaltag", emptyList(), expect = "Grünes Licht für Intensität")
-    check("Gestern Intervalle (25 min Z4 von 75)",
-        listOf(ride(1, 85.0, 0.86, 4500.0, mapOf(4 to 1500, 5 to 60))), expect = "Nur Grundlage / Z2")
+    /* Neu: bei unauffälligen Markern ist ein zweiter Qualitätstag zulässig — die starre
+       48-Stunden-Regel widersprach der Blockperiodisierungs- und HRV-Steuerungsliteratur. */
+    check("Gestern Intervalle, Marker unauffällig",
+        listOf(ride(1, 85.0, 0.86, 4500.0, mapOf(4 to 1500, 5 to 60))), expect = "Grünes Licht für Intensität")
+    val tired = wellnessSeries().toMutableList().also { it[it.size - 1] = it.last().copy(restingHr = 45.0) }
+    check("Gestern Intervalle, Ruhepuls +3", 
+        listOf(ride(1, 85.0, 0.86, 4500.0, mapOf(4 to 1500, 5 to 60))), wl = tired, expect = "Nur Grundlage / Z2")
+    check("Drei Qualitätstage in Folge",
+        (1..3).map { ride(it, 85.0, 0.86, 4500.0, mapOf(4 to 1500, 5 to 60)) }, expect = "Nur Grundlage / Z2")
     check("Gestern Social Ride (22 min Z4 von 180)",
         listOf(ride(1, 60.0, 0.68, 10800.0, mapOf(2 to 8000, 4 to 1320, 5 to 240))), expect = "Grünes Licht für Intensität")
     check("Gestern E-Bike-Pendeln",
         listOf(ride(1, 9.0, 0.92, 1500.0, mapOf(4 to 400, 5 to 900), "EBikeRide")), expect = "Grünes Licht für Intensität")
     check("Gestern lockerer Dauerlauf (30 min Z4)",
         listOf(ride(1, 55.0, 0.78, 3000.0, mapOf(4 to 1800), "Run")), expect = "Grünes Licht für Intensität")
-    check("Gestern Laufintervalle (18 min Z5+)",
-        listOf(ride(1, 70.0, 0.92, 3600.0, mapOf(4 to 600, 5 to 1080), "Run")), expect = "Nur Grundlage / Z2")
+    check("Gestern Laufintervalle, Marker unauffällig",
+        listOf(ride(1, 70.0, 0.92, 3600.0, mapOf(4 to 600, 5 to 1080), "Run")), expect = "Grünes Licht für Intensität")
     check("6 Trainingstage in Folge",
         (1..6).map { ride(it, 90.0, 0.75, 5400.0, mapOf(2 to 5000, 4 to 200)) }, expect = "Ruhetag empfohlen")
     check("Heute Qualitaetsreiz absolviert",
@@ -135,7 +142,7 @@ class CrossCheckTest {
         if (!ok) println("        erwartet: $expect | drivers=${p.drivers} decliners=${p.decliners}")
         if (ok) pass++ else fail++
     }
-    progScen("Aufbau: Last hoch, alles besser", 45.0, 62.0, 1.60, 1.70, 5.1, 3.2, 300, 330, expect = "Produktive Progression")
+    progScen("Aufbau: Last hoch, alles besser", 45.0, 62.0, 1.60, 1.70, 5.5, 1.8, 300, 330, expect = "Produktive Progression")
     progScen("Nur Kraft steigt, Rest flach", 57.0, 57.0, 1.65, 1.65, 4.0, 4.0, 300, 330, expect = "Gezielte Verbesserung")
     progScen("Echtes Plateau", 57.0, 57.0, 1.65, 1.65, 4.0, 4.0, 320, 320, expect = "Plateau")
     progScen("Last hoch, Antwort faellt", 45.0, 62.0, 1.70, 1.58, 3.2, 5.4, 340, 305, expect = "Last steigt, Antwort fällt")

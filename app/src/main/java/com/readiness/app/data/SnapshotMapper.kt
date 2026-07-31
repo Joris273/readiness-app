@@ -19,7 +19,7 @@ object SnapshotMapper {
         if (v == null || v.isNaN()) "–" else String.format("%.${d}f", v).replace('.', ',')
     private fun sgn(v: Double?) = if (v != null && v >= 0) "+" else ""
 
-    fun map(r: ReadinessResult, cfg: AnalysisConfig): Snapshot {
+    fun map(r: ReadinessResult, cfg: AnalysisConfig, scoreContext: String? = null): Snapshot {
         val m = r.metrics
         val lh = r.loadHistory
 
@@ -103,6 +103,7 @@ object SnapshotMapper {
             hrvDate = m.hrvDate,
             confounders = cfg.confounders[m.hrvDate].orEmpty(),
             napMinutesToday = cfg.napMinutesByDay[m.hrvDate] ?: 0,
+            scoreContext = scoreContext,
             progression = mapProgression(r.progression, cfg),
             chart = r.chart.map {
                 Snapshot.ChartPoint(it.date, it.ctl, it.atl, it.tsb, it.hrv, it.load)
@@ -164,6 +165,13 @@ object SnapshotMapper {
                 if (p.lcEfPrev != null) "${f(p.lcEfPrev, 2)} → ${f(p.lcEfNow, 2)}" else (p.lcEfNow?.let { f(it, 2) } ?: ""),
                 deltaText(p.lcEfDeltaPct, " %", p.lcEfThin), deltaKind(p.lcEfDeltaPct, true, 1.5),
                 if (p.lcEfDeltaPct == null) (if (openOld > 0) "wird gerade geladen …" else "kein Vergleichswert") else null)
+        }
+        if (p.decNow != null || p.decPrev != null) {
+            rows += Snapshot.Row("Aerobe Entkopplung",
+                "HF-Leistungs-Decoupling (Seiler), lange Einheiten (n=${p.decNPrev}→${p.decN}) — je niedriger, desto besser",
+                if (p.decPrev != null) "${f(p.decPrev)} → ${f(p.decNow)} %" else "${f(p.decNow)} %",
+                p.decDeltaPp?.let { "${sgn(it)}${f(it)} Pp" }, deltaKind(p.decDeltaPp, false, 0.5),
+                if (p.decDeltaPp == null) "zu wenige lange aerobe Einheiten" else null)
         }
         if (p.peakTorqueNow != null) {
             rows += Snapshot.Row("Spitzendrehmoment", "bestes 30-s-Mittel — Orientierung, geht nicht ins Urteil ein",
