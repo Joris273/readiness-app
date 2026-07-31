@@ -211,21 +211,24 @@ private fun ScoreCard(snap: Snapshot?) {
             }
         }
         snap?.let {
+            Spacer(Modifier.height(14.dp))
             it.scoreContext?.let { ctx ->
-                Text(ctx, color = T.Text, fontSize = 11.5.sp, modifier = Modifier.padding(top = 8.dp))
+                Text(ctx, color = T.Text, fontSize = 11.5.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(6.dp))
             }
             Text((if (it.renormalized) "Teilweise fehlende Daten — Gewichte neu normiert · " else "") + "Datenstand ${it.dataDate}",
-                color = T.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                color = T.Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(14.dp))
             OutlinedButton(
                 onClick = { open = !open },
                 border = BorderStroke(1.dp, T.Line),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = T.Text),
-                modifier = Modifier.padding(top = 10.dp),
             ) {
                 Text(if (open) "Zusammensetzung verbergen ▴" else "Zusammensetzung anzeigen ▾", fontSize = 13.sp)
             }
             if (open) Column(Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(8.dp))
                 it.components.forEach { c -> ComponentRow(c) }
                 Text("Basis-Score ${it.baseScore ?: "–"}" + (if (it.deduction > 0) " − ${it.deduction} Belastung" else "") +
                     " = ${it.score ?: "–"}", color = T.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))

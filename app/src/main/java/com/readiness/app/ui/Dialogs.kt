@@ -67,15 +67,15 @@ fun DayEntryCard(date: String, active: List<String>, napMinutes: Int, onOpen: ()
         if (active.isNotEmpty()) add(active.joinToString(", ") { Confounders.label(it) })
     }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(T.Panel)
-        .clickable(onClick = onOpen).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+        .clickable(onClick = onOpen).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
                 if (parts.isEmpty()) "Eintrag für heute: Powernap oder Störfaktor"
                 else parts.joinToString(" · "),
-                color = if (parts.isEmpty()) T.Text else T.Amber, fontSize = 13.sp)
-            Text(date, color = T.Faint, fontSize = 10.5.sp)
+                color = if (parts.isEmpty()) T.Text else T.Amber, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(date, color = T.Muted, fontSize = 11.5.sp)
         }
-        Text("▾", color = T.Muted)
+        Text("▾", color = T.Muted, fontSize = 14.sp)
     }
 }
 

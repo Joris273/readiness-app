@@ -20,7 +20,7 @@ import com.readiness.app.domain.AnalysisConfig
 fun ProgressionStrip(p: Snapshot.Progression, onOpen: () -> Unit) {
     val opt = AnalysisConfig.CYCLE_OPTIONS.firstOrNull { it.n == p.cycles } ?: AnalysisConfig.CYCLE_OPTIONS[0]
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(T.Panel)
-        .clickable(onClick = onOpen).padding(13.dp)) {
+        .clickable(onClick = onOpen).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(T.hex(p.colorHex)))
             Spacer(Modifier.width(9.dp))
