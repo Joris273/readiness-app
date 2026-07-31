@@ -35,7 +35,7 @@ class ScoreHistoryStore(context: Context) {
     }
 
     /** Einordnung des heutigen Werts in die eigene Verteilung der letzten Tage. */
-    fun classify(score: Int?, today: String, window: Int = 60): Context? {
+    fun classify(score: Int?, today: String, window: Int = 60): ScoreContext? {
         if (score == null) return null
         val hist = load().filterKeys { it != today }.values.toList()
         if (hist.size < 14) return null      // zu wenig Verlauf für eine Einordnung
@@ -51,8 +51,8 @@ class ScoreHistoryStore(context: Context) {
             pct >= 20 -> "unterdurchschnittlich für dich"
             else -> "einer deiner schwächsten Tage"
         }
-        return Context(pct, median, hist.size, label)
+        return ScoreContext(pct, median, hist.size, label)
     }
 
-    data class Context(val percentile: Int, val median: Int, val days: Int, val label: String)
+    data class ScoreContext(val percentile: Int, val median: Int, val days: Int, val label: String)
 }
