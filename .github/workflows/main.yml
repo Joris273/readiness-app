@@ -1,0 +1,72 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # Beim Aktualisieren eines bestehenden Repos bleiben Dateien der Vorversion liegen,
+      # wenn es sie im neuen Stand nicht mehr gibt. Der Compiler meldet das als Dutzende
+      # Folgefehler, aus denen die Ursache kaum erkennbar ist. Hier wird sie benannt.
+      - name: Projektstand pruefen
+        run: |
+          find app/src -name '*.kt' | sort > /tmp/actual.txt
+          sort tools/expected-files.txt -o /tmp/expected.txt
+          extra=$(comm -13 /tmp/expected.txt /tmp/actual.txt)
+          missing=$(comm -23 /tmp/expected.txt /tmp/actual.txt)
+          rc=0
+          if [ -n "$extra" ]; then
+            echo "::error::Reste einer Vorversion — bitte diese Dateien loeschen:"
+            echo "$extra" | sed 's/^/  /'
+            rc=1
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::Es fehlen Dateien:"
+            echo "$missing" | sed 's/^/  /'
+            rc=1
+          fi
+          [ $rc -eq 0 ] && echo "Projektstand vollstaendig und ohne Altlasten."
+          exit $rc
+
+      # Belegt, dass die portierte Logik zahlengleich mit dem Prototyp rechnet.
+      - name: Wissenschaftliche Logik pruefen
+        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Testbericht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+
+      - name: Debug-APK bauen
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: readiness-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
